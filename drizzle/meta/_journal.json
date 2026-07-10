@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1783676773107,
+      "tag": "0000_exotic_nightshade",
+      "breakpoints": true
+    }
+  ]
+}
