@@ -87,7 +87,7 @@ export const spendingTransactionSchema = z.object({
 });
 
 export const walletSchema = z.object({
-  chain: z.enum(["Bitcoin", "Ethereum", "Base", "Arbitrum"]),
+  chain: z.enum(["Bitcoin", "Ethereum", "Solana", "Base", "Arbitrum"]),
   address: z.string().trim().min(20).max(128),
   label: z.string().trim().min(1).max(160),
 });
@@ -113,7 +113,9 @@ export function assertWalletAddress(chain: string, address: string) {
   const valid =
     chain === "Bitcoin"
       ? /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{20,70}$/.test(address)
-      : /^0x[a-fA-F0-9]{40}$/.test(address);
+      : chain === "Solana"
+        ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)
+        : /^0x[a-fA-F0-9]{40}$/.test(address);
 
   if (!valid) {
     throw new Error(`Enter a valid ${chain} public address.`);

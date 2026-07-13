@@ -35,6 +35,19 @@ describe("calculatePortfolio", () => {
     expect(summary.holdings[0].costBasisUsd).toBe("0");
   });
 
+  it("retains realized P&L after a position is fully closed", () => {
+    const summary = calculatePortfolio([
+      { id: "1", assetSymbol: "BTC", transactionType: "BUY", quantity: "1", unitPriceUsd: "100", feeUsd: "2", venue: "A", executedAt: "2026-01-01T00:00:00.000Z" },
+      { id: "2", assetSymbol: "BTC", transactionType: "SELL", quantity: "1", unitPriceUsd: "150", feeUsd: "3", venue: "A", executedAt: "2026-02-01T00:00:00.000Z" },
+    ], [price]);
+
+    expect(summary.holdings).toEqual([]);
+    expect(summary.totalValueUsd).toBe("0");
+    expect(summary.totalCostBasisUsd).toBe("0");
+    expect(summary.unrealizedPnlUsd).toBe("0");
+    expect(summary.realizedPnlUsd).toBe("45");
+  });
+
   it("returns a safe empty summary", () => {
     expect(calculatePortfolio([], [])).toEqual({
       totalValueUsd: "0",

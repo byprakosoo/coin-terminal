@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Papa from "papaparse";
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, FileSpreadsheet, FileUp, RotateCcw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiRequest } from "@/lib/api-client";
-import { normalizePortfolio, normalizeSpending } from "@/lib/imports";
+import { normalizePortfolio, normalizeSpending, parseImportFile } from "@/lib/imports";
 import { useTerminalStore } from "@/store/terminal-store";
 
 type ImportKind = "spending" | "portfolio";
@@ -20,7 +19,7 @@ type Mapping = Record<string, string>;
 const spendingFields = [
   { key: "date", label: "Date", required: true, aliases: ["date", "occurred_on", "transaction date"] },
   { key: "amount", label: "Amount", required: true, aliases: ["amount", "value", "total"] },
-  { key: "direction", label: "Direction", required: true, aliases: ["direction", "type", "income/expense"] },
+  { key: "direction", label: "Direction", required: false, aliases: ["direction", "type", "income/expense"] },
   { key: "category", label: "Category", required: false, aliases: ["category", "group"] },
   { key: "account", label: "Account", required: false, aliases: ["account", "wallet"] },
   { key: "note", label: "Note", required: false, aliases: ["note", "description", "details"] },
@@ -86,8 +85,7 @@ export function ImportWizard({ open, onOpenChange, kind }: { open: boolean; onOp
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv") { setError("Choose a CSV file."); return; }
     if (file.size > 10 * 1024 * 1024) { setError("CSV files must be 10 MB or smaller."); return; }
-    const text = await file.text();
-    const result = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: "greedy", transformHeader: (header) => header.trim() });
+    const result = parseImportFile(await file.arrayBuffer());
     if (result.errors.length && !result.data.length) { setError(result.errors[0].message); return; }
     const detected = result.meta.fields ?? [];
     if (!detected.length) { setError("No header row was detected."); return; }

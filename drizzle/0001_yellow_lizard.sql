@@ -1,0 +1,2 @@
+ALTER TABLE `watchlist_wallets` MODIFY COLUMN `chain` enum('Bitcoin','Ethereum','Solana','Base','Arbitrum') NOT NULL;--> statement-breakpoint
+ALTER TABLE `users` ADD `smart_money_wallets_seeded_at` datetime(3);

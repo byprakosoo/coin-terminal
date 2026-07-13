@@ -4,10 +4,10 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { authClient } from "@/lib/auth-client";
 import { ApiClientError, apiRequest, jsonBody } from "@/lib/api-client";
-import { createDemoData } from "@/lib/seed";
 import type {
   Alert,
   AssistantMessage,
+  BtcSignal,
   Conversation,
   DemoSession,
   DisplayCurrency,
@@ -35,7 +35,7 @@ interface WorkspacePayload {
   fxRates: FxRate[];
   transactions: PortfolioTransaction[];
   spending: SpendingTransaction[];
-  signals: ReturnType<typeof createDemoData>["signals"];
+  signals: BtcSignal[];
   marketHistory: MarketPoint[];
   wallets: WatchlistWallet[];
   events: TokenFlowEvent[];
@@ -59,6 +59,9 @@ interface TerminalState extends WorkspacePayload {
   addTransaction: (input: Omit<PortfolioTransaction, "id">) => Promise<void>;
   updateTransaction: (id: string, input: Omit<PortfolioTransaction, "id">) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  addSpendingTransaction: (input: Omit<SpendingTransaction, "id">) => Promise<void>;
+  updateSpendingTransaction: (id: string, input: Omit<SpendingTransaction, "id">) => Promise<void>;
+  deleteSpendingTransaction: (id: string) => Promise<void>;
   addWallet: (input: Omit<WatchlistWallet, "id">) => Promise<void>;
   toggleWallet: (id: string) => Promise<void>;
   deleteWallet: (id: string) => Promise<void>;
@@ -67,12 +70,25 @@ interface TerminalState extends WorkspacePayload {
   sendMessage: (conversationId: string | undefined, content: string) => Promise<string>;
   newConversation: () => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
-  resetDemo: () => Promise<void>;
   clearPersonalData: () => Promise<void>;
 }
 
-const seed = createDemoData();
-const initial: WorkspacePayload = { ...seed, session: null };
+const initial: WorkspacePayload = {
+  session: null,
+  profile: { id: "", name: "", email: "", timezone: "UTC", displayCurrency: "USD", disclaimerAccepted: false, onboardingComplete: false },
+  prices: [],
+  fxRates: [],
+  transactions: [],
+  spending: [],
+  signals: [],
+  marketHistory: [],
+  wallets: [],
+  events: [],
+  alerts: [],
+  conversations: [],
+  messages: [],
+  importBatches: [],
+};
 
 export const useTerminalStore = create<TerminalState>()(
   persist(
@@ -152,6 +168,24 @@ export const useTerminalStore = create<TerminalState>()(
         await apiRequest<void>(`/api/portfolio/transactions/${id}`, { method: "DELETE" });
         set((state) => ({ transactions: state.transactions.filter((item) => item.id !== id) }));
       },
+      addSpendingTransaction: async (input) => {
+        const transaction = await apiRequest<SpendingTransaction>("/api/spending/transactions", {
+          method: "POST",
+          body: jsonBody(input),
+        });
+        set((state) => ({ spending: [transaction, ...state.spending] }));
+      },
+      updateSpendingTransaction: async (id, input) => {
+        const transaction = await apiRequest<SpendingTransaction>(`/api/spending/transactions/${id}`, {
+          method: "PATCH",
+          body: jsonBody(input),
+        });
+        set((state) => ({ spending: state.spending.map((item) => item.id === id ? transaction : item) }));
+      },
+      deleteSpendingTransaction: async (id) => {
+        await apiRequest<void>(`/api/spending/transactions/${id}`, { method: "DELETE" });
+        set((state) => ({ spending: state.spending.filter((item) => item.id !== id) }));
+      },
       addWallet: async (input) => {
         const wallet = await apiRequest<WatchlistWallet>("/api/wallets", {
           method: "POST",
@@ -228,13 +262,6 @@ export const useTerminalStore = create<TerminalState>()(
           conversations: state.conversations.filter((item) => item.id !== id),
           messages: state.messages.filter((item) => item.conversationId !== id),
         }));
-      },
-      resetDemo: async () => {
-        const workspace = await apiRequest<WorkspacePayload>("/api/workspace", {
-          method: "POST",
-          body: jsonBody({ action: "RESET" }),
-        });
-        set({ ...workspace });
       },
       clearPersonalData: async () => {
         await apiRequest<{ cleared: true }>("/api/workspace", {

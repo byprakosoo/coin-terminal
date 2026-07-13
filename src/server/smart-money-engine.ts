@@ -14,7 +14,7 @@ import {
 import { classifyLateEntry } from "@/server/late-entry";
 import { fetchBestDexPair } from "@/server/providers/dex-screener";
 import { payloadHash, stableId } from "@/server/ids";
-import { providerIds } from "@/server/workspace";
+import { providerIds } from "@/server/constants";
 
 const qualifiedClassifications = [
   "USER_VERIFIED",

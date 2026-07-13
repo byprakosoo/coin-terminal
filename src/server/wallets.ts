@@ -62,14 +62,16 @@ function validateAddress(chain: WalletInput["chain"], address: string) {
   const valid =
     chain === "Bitcoin"
       ? /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{20,70}$/.test(address)
-      : /^0x[a-fA-F0-9]{40}$/.test(address);
+      : chain === "Solana"
+        ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)
+        : /^0x[a-fA-F0-9]{40}$/.test(address);
   if (!valid) {
     throw new ApiError(422, `Enter a valid ${chain} public address.`, "INVALID_WALLET_ADDRESS");
   }
 }
 
 function normalizedAddress(chain: WalletInput["chain"], address: string) {
-  return chain === "Bitcoin" ? address : address.toLowerCase();
+  return chain === "Bitcoin" || chain === "Solana" ? address : address.toLowerCase();
 }
 
 function affectedRows(result: unknown) {

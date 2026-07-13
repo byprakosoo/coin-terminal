@@ -38,6 +38,7 @@ export const users = mysqlTable(
     disclaimerAccepted: boolean("disclaimer_accepted").notNull().default(false),
     onboardingComplete: boolean("onboarding_complete").notNull().default(false),
     workspaceSeededAt: timestamp("workspace_seeded_at"),
+    smartMoneyWalletsSeededAt: timestamp("smart_money_wallets_seeded_at"),
     createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
     updatedAt: timestamp("updated_at")
       .notNull()
@@ -370,7 +371,7 @@ export const watchlistWallets = mysqlTable(
     userId: id("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    chain: mysqlEnum("chain", ["Bitcoin", "Ethereum", "Base", "Arbitrum"]).notNull(),
+    chain: mysqlEnum("chain", ["Bitcoin", "Ethereum", "Solana", "Base", "Arbitrum"]).notNull(),
     address: varchar("address", { length: 128 }).notNull(),
     label: varchar("label", { length: 160 }).notNull(),
     classification: mysqlEnum("classification", [

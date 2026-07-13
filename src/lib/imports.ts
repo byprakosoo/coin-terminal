@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import Papa from "papaparse";
 import type {
   PortfolioTransaction,
   SpendingDirection,
@@ -17,8 +18,40 @@ export interface NormalizedImportResult {
   portfolio?: Omit<PortfolioTransaction, "id">;
 }
 
+export function decodeImportText(input: ArrayBuffer | Uint8Array) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const encoding =
+    bytes[0] === 0xff && bytes[1] === 0xfe
+      ? "utf-16le"
+      : bytes[0] === 0xfe && bytes[1] === 0xff
+        ? "utf-16be"
+        : bytes.length >= 4 && bytes[1] === 0 && bytes[3] === 0
+          ? "utf-16le"
+          : "utf-8";
+  return new TextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, "");
+}
+
+export function parseImportFile(input: ArrayBuffer | Uint8Array) {
+  return Papa.parse<Record<string, string>>(decodeImportText(input), {
+    header: true,
+    skipEmptyLines: "greedy",
+    transformHeader: (header) => header.replace(/^\uFEFF/, "").trim(),
+  });
+}
+
 function normalizeDate(value: string) {
-  const parsed = new Date(value);
+  const trimmed = value.trim();
+  const dayFirst = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  if (dayFirst) {
+    const [, day, month, year] = dayFirst;
+    const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    const valid =
+      parsed.getUTCFullYear() === Number(year) &&
+      parsed.getUTCMonth() === Number(month) - 1 &&
+      parsed.getUTCDate() === Number(day);
+    return valid ? parsed.toISOString() : "";
+  }
+  const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
 }
 
@@ -40,12 +73,14 @@ export function normalizeSpending(
   const dateValue = normalizeDate(raw[mapping.date] ?? "");
   const signedAmount = normalizedDecimal(raw[mapping.amount] ?? "");
   const rawDirection = (raw[mapping.direction] ?? "").toUpperCase().trim();
-  const direction: SpendingDirection | "" = /INCOME|CREDIT|IN|RECEIVE/.test(rawDirection)
+  const direction: SpendingDirection | "" = /^(INCOME|CREDIT|IN|RECEIVE|RECEIVED)$/.test(rawDirection)
     ? "INCOME"
-    : /EXPENSE|DEBIT|OUT|SPEND/.test(rawDirection)
+    : /^(EXPENSE|DEBIT|OUT|SPEND|SPENDING)$/.test(rawDirection)
       ? "EXPENSE"
-      : signedAmount && new Decimal(signedAmount).isNegative()
-        ? "EXPENSE"
+      : signedAmount && !new Decimal(signedAmount).isZero()
+        ? new Decimal(signedAmount).isNegative()
+          ? "EXPENSE"
+          : "INCOME"
         : "";
   if (!dateValue) issues.push("Invalid date");
   if (!signedAmount || new Decimal(signedAmount || 0).isZero()) issues.push("Invalid amount");
@@ -55,7 +90,7 @@ export function normalizeSpending(
   const category = raw[mapping.category] || "Uncategorized";
   const account = raw[mapping.account] || "Imported";
   const note = raw[mapping.note] || undefined;
-  const currencyRaw = (raw[mapping.currency] || "USD").toUpperCase();
+  const currencyRaw = (raw[mapping.currency] || "USD").toUpperCase().trim();
   const currency: SpendingTransaction["currency"] =
     currencyRaw === "IDR" || currencyRaw === "EUR" ? currencyRaw : "USD";
   const spending = issues.length

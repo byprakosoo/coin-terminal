@@ -29,6 +29,9 @@ export async function syncWalletActivity() {
 
   for (const wallet of wallets) {
     try {
+      if (wallet.chain === "Solana") {
+        throw new Error("Solana activity sync is not configured; the address remains snapshot-only.");
+      }
       const transfers =
         wallet.chain === "Bitcoin"
           ? await fetchBitcoinTransfers(wallet.address)
@@ -73,7 +76,7 @@ export async function syncWalletActivity() {
       });
     }
 
-    if (wallet.chain !== "Bitcoin") {
+    if (wallet.chain !== "Bitcoin" && wallet.chain !== "Solana") {
       await new Promise((resolve) => setTimeout(resolve, 350));
     }
   }

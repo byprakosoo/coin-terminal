@@ -12,7 +12,7 @@ import {
 import { fetchBtcDailyPrices, fetchCryptoTickers } from "@/server/providers/coingecko";
 import { payloadHash, stableId } from "@/server/ids";
 import { generateBtcSignal, movingAverageSeries } from "@/server/signal-engine";
-import { providerIds } from "@/server/workspace";
+import { providerIds } from "@/server/constants";
 
 const liveRuleVersion = "btc-daily-v1.4.0";
 const liveRuleVersionId = stableId("signal-rule", liveRuleVersion);

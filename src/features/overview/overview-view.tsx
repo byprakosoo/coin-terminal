@@ -33,7 +33,7 @@ export function OverviewView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Private command center" title={`Good ${greeting()}, ${profile.name.split(" ")[0]}`} description="One scan of your tracked finances, BTC research posture, and public-wallet risk signals." actions={<Badge variant="success"><span className="size-1.5 rounded-full bg-success" />Updated {relativeTime(prices[0].observedAt)}</Badge>} />
+      <PageHeader eyebrow="Private command center" title={`Good ${greeting()}, ${profile.name.split(" ")[0] || "there"}`} description="One scan of your tracked finances, BTC research posture, and public-wallet risk signals." actions={<Badge variant={prices[0] ? "success" : "neutral"}><span className="size-1.5 rounded-full bg-current" />{prices[0] ? `Updated ${relativeTime(prices[0].observedAt)}` : "No market data"}</Badge>} />
 
       {portfolio.incompleteBasis && <div className="flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/[0.045] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /><div><p className="text-sm font-medium">Portfolio totals are provisional</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">An ETH reward is missing acquisition value. Quantity is included; cost basis and P&L are flagged incomplete.</p></div></div><Link href="/portfolio" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}>Review ledger<ArrowRight /></Link></div>}
 
@@ -46,7 +46,7 @@ export function OverviewView() {
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.8fr]">
         <Card>
-          <CardHeader><SectionHeader title="Portfolio allocation" description="Calculated from your ledger and latest seeded market snapshot." meta={<Badge variant="info">Calculated</Badge>} /></CardHeader>
+          <CardHeader><SectionHeader title="Portfolio allocation" description="Calculated from your ledger and latest available market snapshot." meta={<Badge variant="info">Calculated</Badge>} /></CardHeader>
           <CardContent className="grid items-center gap-4 pt-2 md:grid-cols-[0.85fr_1.15fr]">
             <div className="relative"><AllocationChart holdings={portfolio.holdings} /><div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="text-center"><p className="numeric text-lg font-semibold">{portfolio.holdings.length}</p><p className="text-[9px] tracking-wider text-muted-foreground uppercase">Assets</p></div></div></div>
             <div className="space-y-1">
@@ -55,7 +55,7 @@ export function OverviewView() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden border-warning/20 bg-[linear-gradient(145deg,rgb(246_167_35/0.075),transparent_45%)]">
+        {signal ? <Card className="overflow-hidden border-warning/20 bg-[linear-gradient(145deg,rgb(246_167_35/0.075),transparent_45%)]">
           <CardHeader><SectionHeader title="BTC daily research" description="Latest decision after the UTC daily candle." meta={<FreshnessBadge value={signal.freshness} />} /></CardHeader>
           <CardContent>
             <div className="flex items-end justify-between gap-4"><div><div className="flex items-center gap-2"><SignalBadge value={signal.action} /><span className="font-mono text-[10px] text-muted-foreground">{signal.ruleVersion}</span></div><p className="numeric mt-4 text-3xl font-semibold">{signal.compositeScore}<span className="text-sm font-normal text-muted-foreground"> / 100</span></p><p className="mt-1 text-xs text-muted-foreground">Composite score</p></div><div className="text-right"><p className="numeric text-xl font-semibold">{formatMoney(signal.priceUsd)}</p><p className="numeric mt-1 text-xs text-success">{formatPct(signal.change24hPct, true)} 24h</p></div></div>
@@ -64,11 +64,11 @@ export function OverviewView() {
             <div className="mt-5 grid grid-cols-3 gap-2 border-t pt-4 text-center"><div><p className="numeric text-sm font-medium">{signal.confidencePct}%</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Confidence</p></div><div><p className="numeric text-sm font-medium">5 / 5</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Factors</p></div><div><p className="numeric text-sm font-medium">{relativeTime(signal.evaluatedAt)}</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Evaluated</p></div></div>
             <Link href="/btc-research" className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "mt-5 w-full")}>Inspect evidence<ArrowRight /></Link>
           </CardContent>
-        </Card>
+        </Card> : <EmptyOverviewCard title="BTC daily research" description="No signal has been generated yet. Run the market synchronization job after the UTC daily candle closes." href="/btc-research" />}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card className={cn(event.entryStatus === "EXTENDED" || event.entryStatus === "AVOID" ? "border-risk/30" : "")}>
+        {event ? <Card className={cn(event.entryStatus === "EXTENDED" || event.entryStatus === "AVOID" ? "border-risk/30" : "")}>
           <CardHeader><SectionHeader title="Priority smart-money event" description="Observed qualified-wallet proxy activity, not verified institutional identity." meta={<EntryBadge value={event.entryStatus} />} /></CardHeader>
           <CardContent>
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex size-11 items-center justify-center rounded-xl border border-risk/25 bg-risk/10 font-mono text-sm font-bold text-risk">{event.tokenSymbol.slice(0, 3)}</span><div><p className="font-medium">{event.tokenName} <span className="text-muted-foreground">· {event.chain}</span></p><p className="mt-1 text-xs text-muted-foreground">{event.qualifiedWalletCount} qualified wallets · first seen {relativeTime(event.firstDetectedAt)}</p></div></div><div className="text-left sm:text-right"><p className="numeric text-xl font-semibold text-risk">{formatPct(event.priceChangePct, true)}</p><p className="text-[10px] tracking-wider text-muted-foreground uppercase">Since detection</p></div></div>
@@ -76,7 +76,7 @@ export function OverviewView() {
             <div className="mt-4 flex items-start gap-2.5 text-xs leading-relaxed text-risk"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" /><span>{event.riskFactors[0]}. Late-entry risk is visually prioritized over the observed buying.</span></div>
             <Link href={`/smart-money?event=${event.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-5")}>Open evidence trail<ArrowRight /></Link>
           </CardContent>
-        </Card>
+        </Card> : <EmptyOverviewCard title="Priority smart-money event" description="No public-wallet events have been observed. Add a wallet and run wallet synchronization to begin." href="/smart-money" />}
 
         <Card>
           <CardHeader><SectionHeader title="Data quality & alerts" description={`${topWarnings.length} items currently need attention.`} meta={<Database className="size-4 text-muted-foreground" />} /></CardHeader>
@@ -92,4 +92,5 @@ export function OverviewView() {
 }
 
 function SmallMetric({ label, value }: { label: string; value: string }) { return <div><p className="numeric truncate text-sm font-semibold">{value}</p><p className="mt-1 truncate text-[9px] tracking-wider text-muted-foreground uppercase">{label}</p></div>; }
+function EmptyOverviewCard({ title, description, href }: { title: string; description: string; href: string }) { return <Card><CardHeader><SectionHeader title={title} description={description} /></CardHeader><CardContent><Link href={href} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>Open setup<ArrowRight /></Link></CardContent></Card>; }
 function greeting() { const hour = new Date().getHours(); return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"; }

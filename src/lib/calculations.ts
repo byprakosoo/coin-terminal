@@ -13,6 +13,15 @@ import type {
 const zero = new Decimal(0);
 const sumDecimals = (values: Decimal[]) => values.reduce((total, value) => total.add(value), new Decimal(0));
 
+export function spendingAmountToUsd(
+  amount: string,
+  currency: SpendingTransaction["currency"],
+  rates: FxRate[] = [],
+) {
+  const rate = new Decimal(rates.find((item) => item.currency === currency)?.usdRate ?? "1");
+  return rate.gt(0) ? new Decimal(amount).div(rate).toString() : new Decimal(amount).toString();
+}
+
 export function calculatePortfolio(
   transactions: PortfolioTransaction[],
   prices: MarketPrice[],
@@ -99,7 +108,10 @@ export function calculatePortfolio(
   );
 
   const totalCost = sumDecimals(holdings.map((holding) => new Decimal(holding.costBasisUsd)));
-  const realized = sumDecimals(holdings.map((holding) => new Decimal(holding.realizedPnlUsd)));
+  // Realized P&L belongs to the ledger, not only to currently open holdings.
+  // A fully sold asset is intentionally omitted from `holdings`, but its closed
+  // position must still contribute to the portfolio-level realized result.
+  const realized = sumDecimals([...assets.values()].map((state) => state.realized));
   const unrealized = totalValue.sub(totalCost);
   const weightedDaily = totalValue.gt(0)
     ? sumDecimals(
@@ -132,10 +144,7 @@ export function calculateSpending(
     sumDecimals(
       items
         .filter((item) => item.direction === direction)
-        .map((item) => {
-          const rate = rates.find((rateItem) => rateItem.currency === item.currency)?.usdRate ?? "1";
-          return new Decimal(item.amount).div(rate);
-        }),
+        .map((item) => new Decimal(spendingAmountToUsd(item.amount, item.currency, rates))),
     );
   const income = sum(current, "INCOME");
   const expenses = sum(current, "EXPENSE");
@@ -145,8 +154,12 @@ export function calculateSpending(
   current
     .filter((item) => item.direction === "EXPENSE")
     .forEach((item) => {
-      const rate = rates.find((rateItem) => rateItem.currency === item.currency)?.usdRate ?? "1";
-      categories.set(item.category, (categories.get(item.category) ?? zero).add(new Decimal(item.amount).div(rate)));
+      categories.set(
+        item.category,
+        (categories.get(item.category) ?? zero).add(
+          spendingAmountToUsd(item.amount, item.currency, rates),
+        ),
+      );
     });
 
   return {

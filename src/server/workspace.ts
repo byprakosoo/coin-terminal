@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { db } from "@/db";
 import {
@@ -21,6 +21,9 @@ import {
   watchlistWallets,
 } from "@/db/schema";
 import { createDemoData } from "@/lib/seed";
+import { trackedWhaleWallets } from "@/lib/tracked-wallets";
+import { providerIds, ruleVersionId } from "@/server/constants";
+import { syncMarketData } from "@/server/jobs/market-sync";
 import type {
   AssistantMessage,
   BtcSignal,
@@ -43,17 +46,78 @@ import {
 } from "@/server/mappers";
 import { fingerprint, payloadHash, stableId } from "@/server/ids";
 
-export const providerIds = {
-  coingecko: stableId("provider", "coingecko"),
-  dexScreener: stableId("provider", "dex-screener"),
-  mempool: stableId("provider", "mempool-space"),
-  etherscan: stableId("provider", "etherscan"),
-  demoFx: stableId("provider", "demo-fx"),
-};
-
-export const ruleVersionId = stableId("signal-rule", "btc-daily-v1.3.0");
-
 export async function ensureWorkspace(userId: string) {
+  const [user] = await db
+    .select({
+      workspaceSeededAt: users.workspaceSeededAt,
+      smartMoneyWalletsSeededAt: users.smartMoneyWalletsSeededAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) throw new Error("Authenticated user record was not found.");
+  await removeLegacyDemoRecords(userId);
+  if (!user.smartMoneyWalletsSeededAt) await seedTrackedWhaleWallets(userId);
+  if (user.workspaceSeededAt) return;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(dataSources)
+      .values([
+        { id: providerIds.coingecko, provider: "CoinGecko", sourceUrl: "https://api.coingecko.com/api/v3", enabled: true },
+        { id: providerIds.dexScreener, provider: "DEX Screener", sourceUrl: "https://api.dexscreener.com", enabled: true },
+        { id: providerIds.mempool, provider: "mempool.space", sourceUrl: "https://mempool.space/api", enabled: true },
+        { id: providerIds.etherscan, provider: "Etherscan", sourceUrl: "https://api.etherscan.io/v2/api", enabled: false },
+      ])
+      .onDuplicateKeyUpdate({ set: { id: sql`${dataSources.id}` } });
+    await tx
+      .insert(signalRuleVersions)
+      .values({
+        id: ruleVersionId,
+        version: "btc-daily-v1.3.0",
+        active: true,
+        configuration: {
+          thresholds: { buy: 70, sell: 30 },
+          staleAfterHours: 24,
+          weights: { momentum: 30, trend: 25, meanReversion: 20, volatility: 15, wallets: 10 },
+        },
+      })
+      .onDuplicateKeyUpdate({ set: { id: sql`${signalRuleVersions.id}` } });
+    await tx
+      .update(users)
+      .set({ workspaceSeededAt: new Date() })
+      .where(and(eq(users.id, userId), isNull(users.workspaceSeededAt)));
+  });
+}
+
+async function seedTrackedWhaleWallets(userId: string) {
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(watchlistWallets)
+      .values(
+        trackedWhaleWallets.map((wallet) => ({
+          id: stableId(userId, `tracked-wallet:${wallet.key}`),
+          userId,
+          chain: wallet.chain,
+          address: wallet.address,
+          label: wallet.label,
+          classification: wallet.classification,
+          qualityScore: wallet.qualityScore,
+          enabled: wallet.enabled,
+        })),
+      )
+      .onDuplicateKeyUpdate({ set: { id: sql`${watchlistWallets.id}` } });
+    await tx
+      .update(users)
+      .set({ smartMoneyWalletsSeededAt: new Date() })
+      .where(and(eq(users.id, userId), isNull(users.smartMoneyWalletsSeededAt)));
+  });
+}
+
+// Retained only as an explicit development fixture generator. Production
+// workspace initialization never calls this function.
+export async function seedDemoWorkspace(userId: string) {
   const [user] = await db
     .select({ workspaceSeededAt: users.workspaceSeededAt })
     .from(users)
@@ -421,6 +485,11 @@ export async function ensureWorkspace(userId: string) {
 
 export async function loadWorkspace(userId: string, signedInAt = new Date()) {
   await ensureWorkspace(userId);
+  try {
+    await syncMarketData();
+  } catch (error) {
+    console.error("Market data refresh failed; loading persisted workspace without a live ticker.", error);
+  }
 
   const [
     profileRows,
@@ -570,12 +639,38 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
   };
 }
 
+async function removeLegacyDemoRecords(userId: string) {
+  const demo = createDemoData();
+  const ids = (items: Array<{ id: string }>) => items.map((item) => stableId(userId, item.id));
+
+  await db.transaction(async (tx) => {
+    const alertIds = ids(demo.alerts);
+    const eventIds = ids(demo.events);
+    const walletIds = ids(demo.wallets);
+    const signalIds = ids(demo.signals);
+    const conversationIds = ids(demo.conversations);
+    const transactionIds = ids(demo.transactions);
+    const spendingIds = ids(demo.spending);
+
+    if (alertIds.length) await tx.delete(alerts).where(inArray(alerts.id, alertIds));
+    if (eventIds.length) await tx.delete(tokenFlowEvents).where(inArray(tokenFlowEvents.id, eventIds));
+    if (walletIds.length) await tx.delete(watchlistWallets).where(inArray(watchlistWallets.id, walletIds));
+    if (signalIds.length) await tx.delete(signals).where(inArray(signals.id, signalIds));
+    if (conversationIds.length) await tx.delete(aiConversations).where(inArray(aiConversations.id, conversationIds));
+    if (transactionIds.length) await tx.delete(portfolioTransactions).where(inArray(portfolioTransactions.id, transactionIds));
+    if (spendingIds.length) await tx.delete(spendingTransactions).where(inArray(spendingTransactions.id, spendingIds));
+  });
+}
+
 type Snapshot = typeof marketSnapshots.$inferSelect;
 
 function latestPrices(rows: Snapshot[]): MarketPrice[] {
   const result = new Map<string, MarketPrice>();
   for (const row of rows) {
     if (row.snapshotType !== "TICKER") continue;
+    // Legacy demo snapshots used the same timestamp for observation and fetch.
+    // Live provider snapshots always retain their actual fetch timestamp.
+    if (row.fetchedAt.getTime() === row.observedAt.getTime()) continue;
     const payload = row.payload as Partial<MarketPrice>;
     if (!payload.assetSymbol || !payload.name || !payload.priceUsd || result.has(payload.assetSymbol)) {
       continue;
@@ -609,11 +704,22 @@ function latestFxRates(rows: Snapshot[]): FxRate[] {
 }
 
 function marketHistory(rows: Snapshot[]): MarketPoint[] {
-  return rows
-    .filter((row) => row.snapshotType === "DAILY_CANDLE" && row.instrument === "BTC/USD")
-    .map((row) => row.payload as unknown as MarketPoint)
-    .filter((point) => point.date && point.close && point.ma20 && point.ma50)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const byDate = new Map<string, { point: MarketPoint; fetchedAt: Date }>();
+  for (const row of rows) {
+    if (row.snapshotType !== "DAILY_CANDLE" || row.instrument !== "BTC/USD") continue;
+    // Historical demo candles used their observation timestamp as fetchedAt.
+    // Provider-backed candles retain the real job fetch timestamp.
+    if (row.fetchedAt.getTime() === row.observedAt.getTime()) continue;
+    const point = row.payload as unknown as MarketPoint;
+    if (!point.date || !point.close || !point.ma20 || !point.ma50) continue;
+    const current = byDate.get(point.date);
+    if (!current || row.fetchedAt > current.fetchedAt) {
+      byDate.set(point.date, { point, fetchedAt: row.fetchedAt });
+    }
+  }
+  return [...byDate.values()]
+    .map(({ point }) => point)
+    .sort((left, right) => left.date.localeCompare(right.date));
 }
 
 function dynamicFreshness(
@@ -628,7 +734,7 @@ function dynamicFreshness(
   return stored;
 }
 
-export async function clearUserWorkspace(userId: string, reseed: boolean) {
+export async function clearUserWorkspace(userId: string) {
   await db.transaction(async (tx) => {
     await tx.delete(importBatches).where(eq(importBatches.userId, userId));
     await tx.delete(portfolioTransactions).where(eq(portfolioTransactions.userId, userId));
@@ -638,10 +744,5 @@ export async function clearUserWorkspace(userId: string, reseed: boolean) {
     await tx.delete(watchlistWallets).where(eq(watchlistWallets.userId, userId));
     await tx.delete(signals).where(eq(signals.userId, userId));
     await tx.delete(aiConversations).where(eq(aiConversations.userId, userId));
-    if (reseed) {
-      await tx.update(users).set({ workspaceSeededAt: null }).where(eq(users.id, userId));
-    }
   });
-
-  if (reseed) await ensureWorkspace(userId);
 }

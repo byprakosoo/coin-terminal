@@ -2,7 +2,6 @@ import "server-only";
 import { createHash } from "node:crypto";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
-import Papa from "papaparse";
 import { db } from "@/db";
 import {
   importBatches,
@@ -13,6 +12,7 @@ import {
 import {
   normalizePortfolio,
   normalizeSpending,
+  parseImportFile,
   type ImportKind,
   type ImportMapping,
 } from "@/lib/imports";
@@ -22,7 +22,7 @@ import { findLedgerSequenceIssue } from "@/server/ledger-validation";
 import { mapImportBatch, mapPortfolioTransaction } from "@/server/mappers";
 
 const requiredMappings = {
-  spending: ["date", "amount", "direction"],
+  spending: ["date", "amount"],
   portfolio: ["asset", "type", "quantity", "price", "date"],
 } as const;
 
@@ -39,13 +39,9 @@ export async function previewImport(input: {
     }
   }
 
-  const text = await input.file.text();
-  const checksum = createHash("sha256").update(text).digest("hex");
-  const parsed = Papa.parse<Record<string, string>>(text, {
-    header: true,
-    skipEmptyLines: "greedy",
-    transformHeader: (header) => header.trim(),
-  });
+  const contents = await input.file.arrayBuffer();
+  const checksum = createHash("sha256").update(new Uint8Array(contents)).digest("hex");
+  const parsed = parseImportFile(contents);
   if (!parsed.data.length) {
     throw new ApiError(422, parsed.errors[0]?.message ?? "No CSV rows were found.", "INVALID_CSV");
   }
@@ -67,33 +63,21 @@ export async function previewImport(input: {
     .limit(1);
   if (existingBatch) {
     if (existingBatch.status === "PREVIEW") {
-      const staged = await db
-        .select()
-        .from(importRows)
-        .where(eq(importRows.batchId, existingBatch.id));
-      return {
-        batchId: existingBatch.id,
-        fileName: existingBatch.fileName,
-        source: existingBatch.source,
-        accepted: existingBatch.acceptedRows,
-        duplicate: existingBatch.duplicateRows,
-        invalid: existingBatch.invalidRows,
-        rows: staged.slice(0, 200).map((row) => ({
-          rowNumber: row.rowNumber,
-          status: row.status,
-          fingerprint: row.fingerprint ?? "",
-          display: ((row.normalized as Record<string, unknown> | null)?.display as string[]) ?? [],
-          issues: row.issues,
-        })),
-        truncated: staged.length > 200,
-      };
+      // A preview is disposable staging data. Re-parse the same file so mapping
+      // changes and parser fixes cannot be hidden by stale validation results.
+      await db
+        .delete(importBatches)
+        .where(
+          and(eq(importBatches.id, existingBatch.id), eq(importBatches.userId, input.userId)),
+        );
+    } else {
+      throw new ApiError(
+        409,
+        "This CSV file has already been imported.",
+        "DUPLICATE_IMPORT",
+        { batchId: existingBatch.id },
+      );
     }
-    throw new ApiError(
-      409,
-      "This CSV file has already been imported.",
-      "DUPLICATE_IMPORT",
-      { batchId: existingBatch.id },
-    );
   }
 
   const existingFingerprints = await loadFingerprints(input.userId, input.kind);

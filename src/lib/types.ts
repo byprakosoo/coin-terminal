@@ -157,9 +157,11 @@ export type WalletClassification =
   | "UNVERIFIED_WHALE"
   | "EXCLUDED";
 
+export type WalletChain = "Bitcoin" | "Ethereum" | "Solana" | "Base" | "Arbitrum";
+
 export interface WatchlistWallet {
   id: string;
-  chain: "Bitcoin" | "Ethereum" | "Base" | "Arbitrum";
+  chain: WalletChain;
   address: string;
   label: string;
   classification: WalletClassification;
