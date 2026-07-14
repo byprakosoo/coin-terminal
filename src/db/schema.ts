@@ -286,6 +286,41 @@ export const marketSnapshots = mysqlTable(
   ],
 );
 
+export const marketCandles = mysqlTable(
+  "market_candles",
+  {
+    id: id().primaryKey(),
+    dataSourceId: id("data_source_id")
+      .notNull()
+      .references(() => dataSources.id),
+    instrument: varchar("instrument", { length: 40 }).notNull(),
+    interval: mysqlEnum("candle_interval", ["1D", "1H"]).notNull(),
+    open: money("open_price").notNull(),
+    high: money("high_price").notNull(),
+    low: money("low_price").notNull(),
+    close: money("close_price").notNull(),
+    volume: quantity("volume").notNull(),
+    openedAt: timestamp("opened_at").notNull(),
+    closedAt: timestamp("closed_at").notNull(),
+    fetchedAt: timestamp("fetched_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    finalized: boolean("finalized").notNull().default(true),
+    checksum: char("checksum", { length: 64 }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("market_candles_source_instrument_interval_open_unique").on(
+      table.dataSourceId,
+      table.instrument,
+      table.interval,
+      table.openedAt,
+    ),
+    index("market_candles_instrument_interval_open_idx").on(
+      table.instrument,
+      table.interval,
+      table.openedAt,
+    ),
+  ],
+);
+
 export const signalRuleVersions = mysqlTable(
   "signal_rule_versions",
   {
@@ -293,6 +328,18 @@ export const signalRuleVersions = mysqlTable(
     version: varchar("version", { length: 80 }).notNull(),
     configuration: json("configuration").$type<Record<string, unknown>>().notNull(),
     active: boolean("active").notNull().default(false),
+    lifecycleStatus: mysqlEnum("lifecycle_status", [
+      "CANDIDATE",
+      "SHADOW",
+      "VALIDATED",
+      "DEGRADED",
+      "REJECTED",
+      "RETIRED",
+    ])
+      .notNull()
+      .default("CANDIDATE"),
+    ruleHash: char("rule_hash", { length: 64 }),
+    validatedAt: timestamp("validated_at"),
     createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
   },
   (table) => [uniqueIndex("signal_rule_versions_version_unique").on(table.version)],
@@ -317,6 +364,15 @@ export const signals = mysqlTable(
     summary: text("summary").notNull(),
     priceUsd: money("price_usd").notNull(),
     change24hPct: score("change_24h_pct").notNull(),
+    mode: mysqlEnum("mode", ["RESEARCH", "SHADOW", "VALIDATED"]).notNull().default("RESEARCH"),
+    availability: mysqlEnum("availability", ["READY", "HALTED"]).notNull().default("READY"),
+    agreementPct: score("agreement_pct").notNull().default("0"),
+    targetAllocationPct: score("target_allocation_pct").notNull().default("0"),
+    deltaAllocationPct: score("delta_allocation_pct").notNull().default("0"),
+    recommendedUsd: money("recommended_usd").notNull().default("0"),
+    recommendedBtc: quantity("recommended_btc").notNull().default("0"),
+    hardExit: boolean("hard_exit").notNull().default(false),
+    inputHash: char("input_hash", { length: 64 }),
     evaluatedAt: timestamp("evaluated_at").notNull(),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
@@ -327,11 +383,88 @@ export const signals = mysqlTable(
       table.instrument,
       table.evaluatedAt,
     ),
-    uniqueIndex("signals_user_instrument_evaluated_unique").on(
+    uniqueIndex("signals_user_instrument_rule_evaluated_unique").on(
       table.userId,
       table.instrument,
+      table.ruleVersionId,
       table.evaluatedAt,
     ),
+  ],
+);
+
+export const btcStrategyProfiles = mysqlTable(
+  "btc_strategy_profiles",
+  {
+    userId: id("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    activeRuleVersionId: id("active_rule_version_id").references(() => signalRuleVersions.id),
+    sleeveBudgetUsd: money("sleeve_budget_usd"),
+    cashBalanceUsd: money("cash_balance_usd").notNull().default("0"),
+    btcQuantity: quantity("btc_quantity").notNull().default("0"),
+    modelAllocationPct: score("model_allocation_pct").notNull().default("0"),
+    lifecycleStatus: mysqlEnum("lifecycle_status", [
+      "CANDIDATE",
+      "SHADOW",
+      "VALIDATED",
+      "DEGRADED",
+      "REJECTED",
+      "PAUSED",
+    ])
+      .notNull()
+      .default("CANDIDATE"),
+    shadowStartedAt: timestamp("shadow_started_at"),
+    lastModelChangeAt: timestamp("last_model_change_at"),
+    recoveringFromHardExit: boolean("recovering_from_hard_exit").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [index("btc_strategy_profiles_rule_idx").on(table.activeRuleVersionId)],
+);
+
+export const strategyValidationRuns = mysqlTable(
+  "strategy_validation_runs",
+  {
+    id: id().primaryKey(),
+    ruleVersionId: id("rule_version_id")
+      .notNull()
+      .references(() => signalRuleVersions.id),
+    status: mysqlEnum("status", ["RUNNING", "PASSED", "FAILED"]).notNull(),
+    datasetStartedOn: date("dataset_started_on", { mode: "string" }),
+    datasetEndedOn: date("dataset_ended_on", { mode: "string" }),
+    ruleHash: char("rule_hash", { length: 64 }).notNull(),
+    dataHash: char("data_hash", { length: 64 }),
+    metrics: json("metrics").$type<Record<string, unknown>>().notNull(),
+    failureReasons: json("failure_reasons").$type<string[]>().notNull(),
+    startedAt: timestamp("started_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [index("strategy_validation_runs_rule_started_idx").on(table.ruleVersionId, table.startedAt)],
+);
+
+export const signalAcknowledgements = mysqlTable(
+  "signal_acknowledgements",
+  {
+    id: id().primaryKey(),
+    signalId: id("signal_id")
+      .notNull()
+      .references(() => signals.id, { onDelete: "cascade" }),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", ["EXECUTED", "SKIPPED", "EXPIRED"]).notNull(),
+    actualPriceUsd: money("actual_price_usd"),
+    actualQuantityBtc: quantity("actual_quantity_btc"),
+    actualFeeUsd: money("actual_fee_usd"),
+    executedAt: timestamp("executed_at"),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  },
+  (table) => [
+    uniqueIndex("signal_acknowledgements_signal_unique").on(table.signalId),
+    index("signal_acknowledgements_user_created_idx").on(table.userId, table.createdAt),
   ],
 );
 

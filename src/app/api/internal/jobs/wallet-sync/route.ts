@@ -3,8 +3,11 @@ import { handleJobRequest } from "@/server/jobs";
 import { syncWalletActivity } from "@/server/jobs/wallet-sync";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function POST(request: NextRequest) {
-  return handleJobRequest(request, "wallet-sync", syncWalletActivity);
-}
+const run = (request: NextRequest) =>
+  handleJobRequest(request, "wallet-sync", syncWalletActivity);
+
+export const GET = run;
+export const POST = run;

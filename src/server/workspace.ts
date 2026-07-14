@@ -76,7 +76,8 @@ export async function ensureWorkspace(userId: string) {
       .values({
         id: ruleVersionId,
         version: "btc-daily-v1.3.0",
-        active: true,
+        active: false,
+        lifecycleStatus: "RETIRED",
         configuration: {
           thresholds: { buy: 70, sell: 30 },
           staleAfterHours: 24,
@@ -230,7 +231,8 @@ export async function seedDemoWorkspace(userId: string) {
       .values({
         id: ruleVersionId,
         version: "btc-daily-v1.3.0",
-        active: true,
+        active: false,
+        lifecycleStatus: "RETIRED",
         configuration: {
           thresholds: { buy: 70, sell: 30 },
           staleAfterHours: 24,
@@ -577,11 +579,34 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     walletIdsByEvent.set(row.token_flow_event_wallets.tokenFlowEventId, list);
   }
 
-  const toolByMessage = new Map(toolCallRows.map(({ call }) => [call.aiMessageId, call.toolName]));
-  const messages = messageRows.map(({ message }) => ({
-    ...mapMessage(message),
-    toolName: toolByMessage.get(message.id) as AssistantMessage["toolName"],
-  }));
+  const toolCallByMessage = new Map(toolCallRows.map(({ call }) => [call.aiMessageId, call]));
+  const messages = messageRows.map(({ message }) => {
+    const call = toolCallByMessage.get(message.id);
+    const generationMode = call?.resultSummary?.generationMode;
+    const generationFallbackReason = call?.resultSummary?.fallbackReason;
+    const model = call?.resultSummary?.model;
+    return {
+      ...mapMessage(message),
+      toolName: call?.toolName as AssistantMessage["toolName"],
+      generationMode:
+        generationMode === "VERCEL_AI_GATEWAY" ||
+        generationMode === "OPENAI" ||
+        generationMode === "DETERMINISTIC"
+          ? generationMode
+          : undefined,
+      generationFallbackReason:
+        generationFallbackReason === "NOT_CONFIGURED" ||
+        generationFallbackReason === "PROVIDER_AUTHENTICATION" ||
+        generationFallbackReason === "PROVIDER_BILLING" ||
+        generationFallbackReason === "PROVIDER_RATE_LIMIT" ||
+        generationFallbackReason === "PROVIDER_ERROR" ||
+        generationFallbackReason === "EMPTY_RESPONSE" ||
+        generationFallbackReason === "UNSAFE_RESPONSE"
+          ? generationFallbackReason
+          : undefined,
+      model: typeof model === "string" ? model : undefined,
+    };
+  });
 
   const rules = new Map(ruleRows.map((rule) => [rule.id, rule.version]));
   const evidenceBySignal = new Map<string, typeof evidenceRows>();
@@ -603,6 +628,15 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     summary: signal.summary,
     priceUsd: signal.priceUsd,
     change24hPct: signal.change24hPct,
+    mode: signal.mode,
+    availability: signal.availability,
+    agreementPct: signal.agreementPct,
+    targetAllocationPct: signal.targetAllocationPct,
+    deltaAllocationPct: signal.deltaAllocationPct,
+    recommendedUsd: signal.recommendedUsd,
+    recommendedBtc: signal.recommendedBtc,
+    hardExit: signal.hardExit,
+    inputHash: signal.inputHash ?? undefined,
     evidence: (evidenceBySignal.get(signal.id) ?? []).map(({ evidence }) => ({
       id: evidence.id,
       group: evidence.groupName,
@@ -613,6 +647,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
       interpretation: evidence.interpretation,
       source: evidence.sourceLabel,
       sourceUrl: evidence.sourceUrl,
+      sourceLinks: evidenceSourceLinks(evidence.details),
       observedAt: evidence.observedAt.toISOString(),
       kind: evidence.evidenceKind,
     })),
@@ -732,6 +767,22 @@ function dynamicFreshness(
   if (age > 24 * 60 * 60 * 1000) return "STALE";
   if (age > freshForMs) return "DELAYED";
   return stored;
+}
+
+function evidenceSourceLinks(details: Record<string, unknown> | null) {
+  if (!details || !Array.isArray(details.sourceLinks)) return undefined;
+  const links = details.sourceLinks.filter(
+    (item): item is { label: string; url: string } =>
+      Boolean(
+        item &&
+          typeof item === "object" &&
+          "label" in item &&
+          typeof item.label === "string" &&
+          "url" in item &&
+          typeof item.url === "string",
+      ),
+  );
+  return links.length ? links : undefined;
 }
 
 export async function clearUserWorkspace(userId: string) {

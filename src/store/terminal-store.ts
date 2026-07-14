@@ -64,6 +64,7 @@ interface TerminalState extends WorkspacePayload {
   deleteSpendingTransaction: (id: string) => Promise<void>;
   addWallet: (input: Omit<WatchlistWallet, "id">) => Promise<void>;
   toggleWallet: (id: string) => Promise<void>;
+  setWalletSelfAttested: (id: string, selfAttested: boolean) => Promise<void>;
   deleteWallet: (id: string) => Promise<void>;
   markAlertRead: (id: string) => Promise<void>;
   markAllAlertsRead: () => Promise<void>;
@@ -199,6 +200,18 @@ export const useTerminalStore = create<TerminalState>()(
         const wallet = await apiRequest<WatchlistWallet>(`/api/wallets/${id}`, {
           method: "PATCH",
           body: jsonBody({ enabled: !current.enabled }),
+        });
+        set((state) => ({
+          wallets: state.wallets.map((item) => (item.id === id ? wallet : item)),
+        }));
+      },
+      setWalletSelfAttested: async (id, selfAttested) => {
+        const wallet = await apiRequest<WatchlistWallet>(`/api/wallets/${id}`, {
+          method: "PATCH",
+          body: jsonBody({
+            classification: selfAttested ? "USER_VERIFIED" : "UNVERIFIED_WHALE",
+            ...(selfAttested ? { attestationAccepted: true } : {}),
+          }),
         });
         set((state) => ({
           wallets: state.wallets.map((item) => (item.id === id ? wallet : item)),

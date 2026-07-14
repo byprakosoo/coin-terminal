@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/internal/jobs/wallet-sync",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/internal/jobs/btc-strategy-validate",
+      "schedule": "0 1 1 * *"
+    },
+    {
+      "path": "/api/internal/jobs/btc-strategy-daily",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

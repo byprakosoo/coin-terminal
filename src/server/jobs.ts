@@ -14,7 +14,8 @@ export async function handleJobRequest<T>(
 ) {
   try {
     authorizeCron(request);
-    const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() ||
+      (request.method === "GET" ? `${jobName}:${new Date().toISOString().slice(0, 10)}` : undefined);
     if (!idempotencyKey || idempotencyKey.length > 255) {
       throw new ApiError(
         422,

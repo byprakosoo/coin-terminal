@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { watchlistWallets } from "@/db/schema";
 import { ApiError } from "@/server/api";
 import { createId } from "@/server/ids";
+import { getTrackedWalletMetadata } from "@/lib/tracked-wallets";
+import { resolveWalletAttestation } from "@/lib/wallet-attestation";
 import { mapWallet } from "@/server/mappers";
 import type { walletPatchSchema, walletSchema } from "@/server/validators";
 import type { z } from "zod";
@@ -34,14 +36,47 @@ export async function createWallet(userId: string, input: WalletInput) {
 
 export async function updateWallet(userId: string, walletId: string, input: WalletPatch) {
   const [existing] = await db
-    .select({ id: watchlistWallets.id })
+    .select({
+      id: watchlistWallets.id,
+      chain: watchlistWallets.chain,
+      address: watchlistWallets.address,
+      classification: watchlistWallets.classification,
+    })
     .from(watchlistWallets)
     .where(and(eq(watchlistWallets.id, walletId), eq(watchlistWallets.userId, userId)))
     .limit(1);
   if (!existing) throw new ApiError(404, "Wallet not found.", "NOT_FOUND");
+
+  const updates: {
+    label?: string;
+    enabled?: boolean;
+    classification?: "USER_VERIFIED" | "UNVERIFIED_WHALE";
+    qualityScore?: string;
+  } = {};
+  if (input.label !== undefined) updates.label = input.label;
+  if (input.enabled !== undefined) updates.enabled = input.enabled;
+  if (input.classification !== undefined) {
+    const result = resolveWalletAttestation({
+      currentClassification: existing.classification,
+      requestedClassification: input.classification,
+      attestationAccepted: input.attestationAccepted,
+      curatedRegistryWallet: Boolean(
+        getTrackedWalletMetadata(existing.chain, existing.address),
+      ),
+    });
+    if (!result.ok) {
+      throw new ApiError(
+        result.code === "ATTESTATION_REQUIRED" ? 422 : 409,
+        result.message,
+        result.code,
+      );
+    }
+    Object.assign(updates, result.patch);
+  }
+
   await db
     .update(watchlistWallets)
-    .set(input)
+    .set(updates)
     .where(and(eq(watchlistWallets.id, walletId), eq(watchlistWallets.userId, userId)));
   const [row] = await db
     .select()

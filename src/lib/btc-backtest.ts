@@ -164,7 +164,8 @@ export function backtestBtcSignal(
     limitations: [
       "Uses daily closes, so intraday execution, spread, slippage, and taxes are not modeled.",
       `Includes ${feeBps} bps per position change and executes only at the next daily close.`,
-      "Wallet context is held neutral at 50 until an attributed exchange-flow provider is configured and separately backtested.",
+      "CFTC institutional positioning is held neutral at 50 because this candle-only simulation does not join point-in-time weekly COT history.",
+      "Wallet context is held at the configured constant and does not reconstruct historical address transfers.",
       "Past simulated performance does not predict future returns.",
     ],
     equity: points,

@@ -15,6 +15,20 @@
       "when": 1783915612950,
       "tag": "0001_yellow_lizard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1783930815261,
+      "tag": "0002_tearful_gunslinger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1783931223042,
+      "tag": "0003_lame_ben_urich",
+      "breakpoints": true
     }
   ]
 }

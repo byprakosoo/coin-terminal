@@ -1,0 +1,177 @@
+import { describe, expect, it, vi } from "vitest";
+import { buildAssistantReply } from "@/lib/assistant";
+import { createDemoData } from "@/lib/seed";
+import {
+  buildPortfolioModelContext,
+  extractResponseText,
+  generateAssistantAnswer,
+} from "@/server/ai-portfolio-assistant";
+
+const seed = createDemoData(new Date("2026-07-10T12:00:00.000Z").getTime());
+const context = {
+  transactions: seed.transactions,
+  spending: seed.spending,
+  prices: seed.prices,
+  signals: seed.signals,
+  events: seed.events,
+  fxRates: seed.fxRates,
+};
+const groundedReply = buildAssistantReply("What is my portfolio worth?", context);
+
+describe("AI portfolio assistant", () => {
+  it("keeps private identifiers and notes out of model context", () => {
+    const modelContext = buildPortfolioModelContext({
+      question: "Summarize my portfolio",
+      context,
+      groundedReply,
+    });
+    const serialized = JSON.stringify(modelContext);
+
+    expect(serialized).not.toContain(seed.transactions[0].id);
+    expect(serialized).not.toContain("fingerprint");
+    expect(serialized).not.toContain("note");
+    expect(modelContext.portfolio.holdings.length).toBeGreaterThan(0);
+  });
+
+  it("uses deterministic output when an API key is not configured", async () => {
+    const result = await generateAssistantAnswer({
+      question: "What is my portfolio worth?",
+      context,
+      groundedReply,
+      gatewayToken: "",
+      apiKey: "",
+    });
+
+    expect(result.mode).toBe("DETERMINISTIC");
+    expect(result.fallbackReason).toBe("NOT_CONFIGURED");
+    expect(result.reply).toEqual(groundedReply);
+  });
+
+  it("uses response output text without changing verified receipts", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          output: [{ type: "message", content: [{ type: "output_text", text: "Grounded model answer." }] }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const result = await generateAssistantAnswer({
+      question: "Compare my BTC exposure with the rest",
+      context,
+      groundedReply,
+      gatewayToken: "",
+      apiKey: "test-key",
+      model: "test-model",
+      fetcher,
+    });
+
+    expect(result.mode).toBe("OPENAI");
+    expect(result.reply.content).toBe("Grounded model answer.");
+    expect(result.reply.sources).toEqual(groundedReply.sources);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("prefers Vercel AI Gateway and sends developer rules separately from data", async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request, request?: RequestInit) => {
+      void url;
+      void request;
+      return new Response(JSON.stringify({ output_text: "Gateway answer." }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      gatewayToken: "oidc-token",
+      gatewayModel: "openai/test-gateway-model",
+      apiKey: "",
+      fetcher,
+    });
+    const [url, request] = fetcher.mock.calls[0];
+    const body = JSON.parse(String(request?.body)) as {
+      model: string;
+      input: Array<{ role: string; content: string }>;
+      store?: boolean;
+    };
+
+    expect(result.mode).toBe("VERCEL_AI_GATEWAY");
+    expect(url).toBe("https://ai-gateway.vercel.sh/v1/responses");
+    expect(body.model).toBe("openai/test-gateway-model");
+    expect(body.input[0].role).toBe("developer");
+    expect(body.input[1].role).toBe("user");
+    expect(body.store).toBeUndefined();
+  });
+
+  it("falls through from a failed gateway request to direct OpenAI", async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request) =>
+      String(url).includes("ai-gateway")
+        ? new Response("unavailable", { status: 503 })
+        : new Response(JSON.stringify({ output_text: "Direct fallback answer." }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+    );
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      gatewayToken: "oidc-token",
+      apiKey: "openai-key",
+      model: "direct-model",
+      fetcher,
+    });
+
+    expect(result.mode).toBe("OPENAI");
+    expect(result.model).toBe("direct-model");
+    expect(result.reply.content).toBe("Direct fallback answer.");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("records Vercel customer verification as a billing setup fallback", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ error: { type: "customer_verification_required" } }),
+        { status: 403, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      gatewayToken: "oidc-token",
+      apiKey: "",
+      fetcher,
+    });
+
+    expect(result.mode).toBe("DETERMINISTIC");
+    expect(result.fallbackReason).toBe("PROVIDER_BILLING");
+  });
+
+  it("rejects direct trading instructions from a model and preserves the grounded answer", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ output_text: "You should buy 0.5 BTC immediately for a guaranteed return." }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const result = await generateAssistantAnswer({
+      question: "Explain my BTC exposure",
+      context,
+      groundedReply,
+      gatewayToken: "oidc-token",
+      apiKey: "",
+      fetcher,
+    });
+
+    expect(result.mode).toBe("DETERMINISTIC");
+    expect(result.fallbackReason).toBe("UNSAFE_RESPONSE");
+    expect(result.reply).toEqual(groundedReply);
+  });
+
+  it("extracts the convenience output_text field", () => {
+    expect(extractResponseText({ output_text: "  Answer  " })).toBe("Answer");
+  });
+});

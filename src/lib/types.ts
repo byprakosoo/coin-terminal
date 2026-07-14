@@ -113,6 +113,16 @@ export interface SpendingSummary {
 }
 
 export type SignalAction = "BUY" | "SELL" | "WATCH";
+export type StrategyLifecycle =
+  | "CANDIDATE"
+  | "SHADOW"
+  | "VALIDATED"
+  | "DEGRADED"
+  | "REJECTED"
+  | "RETIRED"
+  | "PAUSED";
+export type SignalMode = "RESEARCH" | "SHADOW" | "VALIDATED";
+export type SignalAvailability = "READY" | "HALTED";
 
 export interface SignalEvidence {
   id: string;
@@ -124,6 +134,7 @@ export interface SignalEvidence {
   interpretation: string;
   source: string;
   sourceUrl: string;
+  sourceLinks?: Array<{ label: string; url: string }>;
   observedAt: string;
   kind: EvidenceKind;
 }
@@ -140,7 +151,56 @@ export interface BtcSignal {
   summary: string;
   priceUsd: DecimalString;
   change24hPct: DecimalString;
+  mode: SignalMode;
+  availability: SignalAvailability;
+  agreementPct: DecimalString;
+  targetAllocationPct: DecimalString;
+  deltaAllocationPct: DecimalString;
+  recommendedUsd: DecimalString;
+  recommendedBtc: DecimalString;
+  hardExit: boolean;
+  inputHash?: string;
   evidence: SignalEvidence[];
+}
+
+export interface BtcStrategyProfile {
+  lifecycleStatus: StrategyLifecycle;
+  ruleVersion: string;
+  ruleHash: string;
+  sleeveBudgetUsd?: DecimalString;
+  cashBalanceUsd: DecimalString;
+  btcQuantity: DecimalString;
+  modelAllocationPct: DecimalString;
+  confirmedAllocationPct: DecimalString;
+  shadowStartedAt?: string;
+  shadowDays: number;
+  shadowSignals: number;
+  lastModelChangeAt?: string;
+  recoveringFromHardExit: boolean;
+  latestValidation?: StrategyValidationSummary;
+}
+
+export interface StrategyValidationSummary {
+  id: string;
+  status: "RUNNING" | "PASSED" | "FAILED";
+  datasetStartedOn?: string;
+  datasetEndedOn?: string;
+  ruleHash: string;
+  metrics: Record<string, unknown>;
+  failureReasons: string[];
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface SignalAcknowledgement {
+  id: string;
+  signalId: string;
+  status: "EXECUTED" | "SKIPPED" | "EXPIRED";
+  actualPriceUsd?: DecimalString;
+  actualQuantityBtc?: DecimalString;
+  actualFeeUsd?: DecimalString;
+  executedAt?: string;
+  createdAt: string;
 }
 
 export interface MarketPoint {
@@ -222,6 +282,20 @@ export interface SourceReceipt {
   kind: EvidenceKind;
 }
 
+export type AssistantGenerationMode =
+  | "VERCEL_AI_GATEWAY"
+  | "OPENAI"
+  | "DETERMINISTIC";
+
+export type AssistantFallbackReason =
+  | "NOT_CONFIGURED"
+  | "PROVIDER_AUTHENTICATION"
+  | "PROVIDER_BILLING"
+  | "PROVIDER_RATE_LIMIT"
+  | "PROVIDER_ERROR"
+  | "EMPTY_RESPONSE"
+  | "UNSAFE_RESPONSE";
+
 export interface AssistantMessage {
   id: string;
   conversationId: string;
@@ -231,6 +305,9 @@ export interface AssistantMessage {
   toolName?: AssistantToolName;
   sources?: SourceReceipt[];
   investmentRelated?: boolean;
+  generationMode?: AssistantGenerationMode;
+  generationFallbackReason?: AssistantFallbackReason;
+  model?: string;
 }
 
 export interface Conversation {

@@ -27,11 +27,11 @@ describe("qualifyWallet", () => {
     expect(result.classification).toBe("UNVERIFIED_WHALE");
   });
 
-  it("gives exclusion precedence over manual trust", () => {
+  it("gives exclusion precedence over self-attestation", () => {
     expect(
       qualifyWallet({
         excludedService: true,
-        manuallyTrusted: true,
+        selfAttested: true,
         closedPositions: 100,
         realizedPerformanceUsd: "1000",
         winRatePct: "90",

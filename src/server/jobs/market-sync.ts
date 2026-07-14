@@ -1,21 +1,11 @@
 import "server-only";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  dataSources,
-  marketSnapshots,
-  signalEvidence,
-  signalRuleVersions,
-  signals,
-  users,
-} from "@/db/schema";
+import { dataSources, marketSnapshots } from "@/db/schema";
 import { fetchBtcDailyPrices, fetchCryptoTickers } from "@/server/providers/coingecko";
 import { payloadHash, stableId } from "@/server/ids";
-import { generateBtcSignal, movingAverageSeries } from "@/server/signal-engine";
+import { movingAverageSeries } from "@/server/signal-engine";
 import { providerIds } from "@/server/constants";
-
-const liveRuleVersion = "btc-daily-v1.4.0";
-const liveRuleVersionId = stableId("signal-rule", liveRuleVersion);
 
 export async function syncMarketData() {
   const [recentSnapshot] = await db
@@ -47,8 +37,6 @@ export async function syncMarketData() {
   }
   const series = movingAverageSeries(completedCloses);
   const now = new Date();
-  const tickerSnapshotIds = new Map<string, string>();
-  const candleSnapshotIds = new Map<string, string>();
 
   await db.transaction(async (tx) => {
     await tx
@@ -60,25 +48,6 @@ export async function syncMarketData() {
         enabled: true,
       })
       .onDuplicateKeyUpdate({ set: { enabled: true } });
-    await tx
-      .insert(signalRuleVersions)
-      .values({
-        id: liveRuleVersionId,
-        version: liveRuleVersion,
-        active: true,
-        configuration: {
-          thresholds: { buy: 70, sell: 30 },
-          volatilityKillThresholdPct: 95,
-          staleAfterHours: 24,
-          weights: { momentum: 30, trend: 25, meanReversion: 20, volatility: 15, wallets: 10 },
-        },
-      })
-      .onDuplicateKeyUpdate({ set: { active: true } });
-    await tx
-      .update(signalRuleVersions)
-      .set({ active: false })
-      .where(sql`${signalRuleVersions.id} <> ${liveRuleVersionId}`);
-
     for (const ticker of tickers) {
       const payload = {
         assetSymbol: ticker.assetSymbol,
@@ -88,7 +57,6 @@ export async function syncMarketData() {
       };
       const hash = payloadHash(payload);
       const id = stableId("live-ticker", `${ticker.assetSymbol}:${hash}`);
-      tickerSnapshotIds.set(ticker.assetSymbol, id);
       await tx
         .insert(marketSnapshots)
         .values({
@@ -115,7 +83,6 @@ export async function syncMarketData() {
       };
       const hash = payloadHash(payload);
       const id = stableId("live-candle", `${point.date}:${hash}`);
-      candleSnapshotIds.set(point.date, id);
       await tx
         .insert(marketSnapshots)
         .values({
@@ -133,74 +100,11 @@ export async function syncMarketData() {
     }
   });
 
-  const generated = generateBtcSignal(
-    completedCloses.map((point) => ({
-      ...point,
-      observedAt: new Date(`${point.date}T23:59:59.999Z`),
-    })),
-    { now },
-  );
-  const btcTicker = tickers.find((ticker) => ticker.assetSymbol === "BTC");
-  if (!btcTicker) throw new Error("BTC ticker is missing.");
-  const latestDate = completedCloses.at(-1)!.date;
-  const evaluatedAt = new Date(`${latestDate}T23:59:59.999Z`);
-  const expiresAt = new Date(evaluatedAt.getTime() + 24 * 60 * 60 * 1000);
-  const userRows = await db.select({ id: users.id }).from(users);
-
-  for (const user of userRows) {
-    const signalId = stableId(user.id, `live-signal:${latestDate}:${liveRuleVersion}`);
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(signals)
-        .values({
-          id: signalId,
-          userId: user.id,
-          ruleVersionId: liveRuleVersionId,
-          instrument: "BTC/USD",
-          action: generated.action,
-          compositeScore: generated.compositeScore,
-          confidence: generated.confidencePct,
-          freshnessStatus: generated.freshness,
-          summary: generated.summary,
-          priceUsd: btcTicker.priceUsd,
-          change24hPct: btcTicker.dailyChangePct,
-          evaluatedAt,
-          expiresAt,
-        })
-        .onDuplicateKeyUpdate({ set: { id: sql`${signals.id}` } });
-      await tx.delete(signalEvidence).where(eq(signalEvidence.signalId, signalId));
-      await tx.insert(signalEvidence).values(
-        generated.evidence.map((evidence, index) => ({
-          id: stableId(signalId, `evidence:${index}:${evidence.group}`),
-          signalId,
-          marketSnapshotId:
-            evidence.kind === "OBSERVED"
-              ? tickerSnapshotIds.get("BTC")
-              : candleSnapshotIds.get(latestDate),
-          groupName: evidence.group,
-          ruleName: evidence.rule,
-          weightPct: evidence.weightPct,
-          score: evidence.score,
-          value: evidence.value,
-          interpretation: evidence.interpretation,
-          sourceLabel: evidence.source,
-          sourceUrl: evidence.sourceUrl,
-          observedAt: evidence.observedAt,
-          evidenceKind: evidence.kind,
-          details: evidence.details,
-        })),
-      );
-    });
-  }
-
   return {
     provider: "CoinGecko",
     tickerSnapshots: tickers.length,
     dailySnapshots: series.length,
-    signalsGenerated: userRows.length,
-    signalDate: latestDate,
-    action: generated.action,
-    compositeScore: generated.compositeScore,
-    riskKillSwitch: generated.riskKillSwitch,
+    signalsGenerated: 0,
+    strategySignalJob: "btc-strategy-daily",
   };
 }

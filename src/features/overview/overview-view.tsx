@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Decimal from "decimal.js";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, CircleDollarSign, Clock3, Database, Landmark, LineChart, ShieldAlert, WalletCards } from "lucide-react";
 import { AllocationChart } from "@/components/charts";
 import { MetricCard } from "@/components/metric-card";
@@ -13,7 +14,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { calculatePortfolio, calculateSpending } from "@/lib/calculations";
+import { apiRequest } from "@/lib/api-client";
+import { defensiveRuleVersion } from "@/lib/btc-defensive-strategy";
+import { btcResearchRuleVersion } from "@/lib/btc-research-rule";
 import { formatDecimal, formatMoney, formatPct, monthKey } from "@/lib/format";
+import type { BtcStrategyProfile } from "@/lib/types";
 import { cn, relativeTime } from "@/lib/utils";
 import { useTerminalStore } from "@/store/terminal-store";
 
@@ -21,21 +26,33 @@ export function OverviewView() {
   const transactions = useTerminalStore((state) => state.transactions);
   const prices = useTerminalStore((state) => state.prices);
   const spending = useTerminalStore((state) => state.spending);
-  const signal = useTerminalStore((state) => state.signals[0]);
+  const signal = useTerminalStore((state) =>
+    state.signals.find(
+      (item) =>
+        item.ruleVersion === defensiveRuleVersion &&
+        item.mode === "VALIDATED" &&
+        item.availability === "READY",
+    ) ?? state.signals.find((item) => item.ruleVersion === btcResearchRuleVersion),
+  );
   const event = useTerminalStore((state) => state.events[0]);
   const alerts = useTerminalStore((state) => state.alerts);
   const profile = useTerminalStore((state) => state.profile);
   const rates = useTerminalStore((state) => state.fxRates);
   const portfolio = calculatePortfolio(transactions, prices);
   const cashflow = calculateSpending(spending, monthKey(), rates);
+  const incompleteAssets = portfolio.holdings
+    .filter((holding) => holding.incompleteBasis)
+    .map((holding) => holding.assetSymbol);
   const topWarnings = alerts.filter((alert) => !alert.readAt || alert.severity !== "INFO").slice(0, 3);
   const currency = profile.displayCurrency;
+  const [strategy, setStrategy] = useState<BtcStrategyProfile>();
+  useEffect(() => { let active = true; void apiRequest<BtcStrategyProfile>("/api/research/btc/strategy").then((result) => { if (active) setStrategy(result); }).catch(() => undefined); return () => { active = false; }; }, []);
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Private command center" title={`Good ${greeting()}, ${profile.name.split(" ")[0] || "there"}`} description="One scan of your tracked finances, BTC research posture, and public-wallet risk signals." actions={<Badge variant={prices[0] ? "success" : "neutral"}><span className="size-1.5 rounded-full bg-current" />{prices[0] ? `Updated ${relativeTime(prices[0].observedAt)}` : "No market data"}</Badge>} />
+      <PageHeader eyebrow="Private command center" title={`Good ${greeting()}, ${profile.name.split(" ")[0] || "there"}`} description="One scan of your tracked finances, BTC research posture, and observed positioning and wallet-flow context." actions={<Badge variant={prices[0] ? "success" : "neutral"}><span className="size-1.5 rounded-full bg-current" />{prices[0] ? `Updated ${relativeTime(prices[0].observedAt)}` : "No market data"}</Badge>} />
 
-      {portfolio.incompleteBasis && <div className="flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/[0.045] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /><div><p className="text-sm font-medium">Portfolio totals are provisional</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">An ETH reward is missing acquisition value. Quantity is included; cost basis and P&L are flagged incomplete.</p></div></div><Link href="/portfolio" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}>Review ledger<ArrowRight /></Link></div>}
+      {portfolio.incompleteBasis && <div className="flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/[0.045] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /><div><p className="text-sm font-medium">Portfolio totals are provisional</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{incompleteAssets.join(", ") || "One or more assets"} has incomplete acquisition value. Quantity is included; cost basis and P&amp;L are flagged incomplete.</p></div></div><Link href="/portfolio" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}>Review ledger<ArrowRight /></Link></div>}
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard label="Tracked value" value={formatMoney(portfolio.totalValueUsd, currency, rates)} trend={formatPct(portfolio.dailyChangePct, true)} trendDirection={new Decimal(portfolio.dailyChangePct).gte(0) ? "up" : "down"} detail="24h weighted" icon={<WalletCards />} />
@@ -56,15 +73,15 @@ export function OverviewView() {
         </Card>
 
         {signal ? <Card className="overflow-hidden border-warning/20 bg-[linear-gradient(145deg,rgb(246_167_35/0.075),transparent_45%)]">
-          <CardHeader><SectionHeader title="BTC daily research" description="Latest decision after the UTC daily candle." meta={<FreshnessBadge value={signal.freshness} />} /></CardHeader>
+          <CardHeader><SectionHeader title={signal.mode === "VALIDATED" ? "BTC validated model" : "BTC daily research"} description={signal.mode === "VALIDATED" ? "Validated defensive decision after the UTC daily candle." : "Dual-source market research with bounded CFTC and wallet context; no trade or allocation is executed."} meta={<div className="flex items-center gap-2"><Badge variant={signal.mode === "VALIDATED" ? "success" : "warning"}>{signal.mode}</Badge><FreshnessBadge value={signal.freshness} /></div>} /></CardHeader>
           <CardContent>
-            <div className="flex items-end justify-between gap-4"><div><div className="flex items-center gap-2"><SignalBadge value={signal.action} /><span className="font-mono text-[10px] text-muted-foreground">{signal.ruleVersion}</span></div><p className="numeric mt-4 text-3xl font-semibold">{signal.compositeScore}<span className="text-sm font-normal text-muted-foreground"> / 100</span></p><p className="mt-1 text-xs text-muted-foreground">Composite score</p></div><div className="text-right"><p className="numeric text-xl font-semibold">{formatMoney(signal.priceUsd)}</p><p className="numeric mt-1 text-xs text-success">{formatPct(signal.change24hPct, true)} 24h</p></div></div>
+            <div className="flex items-end justify-between gap-4"><div><div className="flex items-center gap-2"><SignalBadge value={signal.action} /><span className="font-mono text-[10px] text-muted-foreground">{signal.ruleVersion}</span></div><p className="numeric mt-4 text-3xl font-semibold">{signal.compositeScore}<span className="text-sm font-normal text-muted-foreground"> / 100</span></p><p className="mt-1 text-xs text-muted-foreground">{signal.mode === "VALIDATED" ? "Rule agreement" : "Weighted evidence score"}</p></div><div className="text-right"><p className="numeric text-xl font-semibold">{formatMoney(signal.priceUsd)}</p><p className="numeric mt-1 text-xs text-success">{formatPct(signal.change24hPct, true)} 24h</p></div></div>
             <Progress value={Number(signal.compositeScore)} className="mt-5" indicatorClassName="bg-warning" />
             <p className="mt-5 text-sm leading-relaxed text-muted-foreground">{signal.summary}</p>
-            <div className="mt-5 grid grid-cols-3 gap-2 border-t pt-4 text-center"><div><p className="numeric text-sm font-medium">{signal.confidencePct}%</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Confidence</p></div><div><p className="numeric text-sm font-medium">5 / 5</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Factors</p></div><div><p className="numeric text-sm font-medium">{relativeTime(signal.evaluatedAt)}</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Evaluated</p></div></div>
+            <div className="mt-5 grid grid-cols-3 gap-2 border-t pt-4 text-center"><div><p className="numeric text-sm font-medium">{signal.confidencePct}%</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Evidence strength</p></div><div><p className="numeric text-sm font-medium">{signal.evidence.length}</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Factors</p></div><div><p className="numeric text-sm font-medium">{relativeTime(signal.evaluatedAt)}</p><p className="mt-1 text-[9px] tracking-wider text-muted-foreground uppercase">Evaluated</p></div></div>
             <Link href="/btc-research" className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "mt-5 w-full")}>Inspect evidence<ArrowRight /></Link>
           </CardContent>
-        </Card> : <EmptyOverviewCard title="BTC daily research" description="No signal has been generated yet. Run the market synchronization job after the UTC daily candle closes." href="/btc-research" />}
+        </Card> : <Card className={strategy?.lifecycleStatus === "REJECTED" ? "border-risk/25" : "border-warning/20"}><CardHeader><SectionHeader title="BTC defensive research" description="Authoritative v2 lifecycle; retired v1 verdicts are excluded." meta={<Badge variant={strategy?.lifecycleStatus === "REJECTED" ? "risk" : "warning"}>{strategy?.lifecycleStatus ?? "LOADING"}</Badge>} /></CardHeader><CardContent><p className="text-sm leading-relaxed text-muted-foreground">{strategy?.lifecycleStatus === "REJECTED" ? "The frozen rule failed independent historical acceptance gates and is not actionable." : "No validated v2 daily signal is available."}</p>{strategy?.latestValidation?.failureReasons[0] && <div className="mt-4 flex gap-2 text-xs text-risk"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" />{strategy.latestValidation.failureReasons[0]}</div>}<Link href="/btc-research" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-5")}>Inspect validation<ArrowRight /></Link></CardContent></Card>}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">

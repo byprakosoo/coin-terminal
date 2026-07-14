@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 import type { WalletClassification } from "@/lib/types";
 
 export interface WalletQualificationInput {
-  manuallyTrusted?: boolean;
+  selfAttested?: boolean;
   publiclyAttributed?: boolean;
   excludedService?: boolean;
   closedPositions: number;
@@ -21,8 +21,11 @@ export function qualifyWallet(input: WalletQualificationInput): {
   if (input.excludedService) {
     return { classification: "EXCLUDED", reasons: ["Address is a known service or excluded entity"] };
   }
-  if (input.manuallyTrusted) {
-    return { classification: "USER_VERIFIED", reasons: ["User manually verified this public address"] };
+  if (input.selfAttested) {
+    return {
+      classification: "USER_VERIFIED",
+      reasons: ["User self-attested ownership or control of this public address"],
+    };
   }
   if (input.publiclyAttributed) {
     return {

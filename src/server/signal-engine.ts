@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { btcResearchRuleConfig } from "@/lib/btc-research-rule";
 import type { EvidenceKind, Freshness, SignalAction } from "@/lib/types";
 
 export interface DailyClose {
@@ -32,18 +33,56 @@ export interface GeneratedSignal {
 }
 
 const weights = {
-  momentum: new Decimal(30),
-  trend: new Decimal(25),
-  meanReversion: new Decimal(20),
-  volatility: new Decimal(15),
-  wallets: new Decimal(10),
+  momentum: new Decimal(btcResearchRuleConfig.weights.momentum),
+  trend: new Decimal(btcResearchRuleConfig.weights.trend),
+  meanReversion: new Decimal(btcResearchRuleConfig.weights.meanReversion),
+  volatility: new Decimal(btcResearchRuleConfig.weights.volatility),
+  institutionalPositioning: new Decimal(
+    btcResearchRuleConfig.weights.institutionalPositioning,
+  ),
+  wallets: new Decimal(btcResearchRuleConfig.weights.wallets),
 };
+
+interface SignalMarketSource {
+  label: string;
+  sourceUrl: string;
+  sourceLinks?: Array<{ label: string; url: string }>;
+  available?: boolean;
+  deviationPct?: string;
+}
+
+interface SignalEvidenceContext {
+  score: string;
+  value: string;
+  interpretation: string;
+  source: string;
+  sourceUrl: string;
+  sourceLinks?: Array<{ label: string; url: string }>;
+  observedAt?: Date;
+  kind?: EvidenceKind;
+  available?: boolean;
+  details?: Record<string, unknown>;
+}
+
+interface GenerateBtcSignalOptions {
+  now?: Date;
+  walletContextScore?: string;
+  institutionalContextScore?: string;
+  volatilityKillThreshold?: string;
+  marketSource?: SignalMarketSource;
+  institutionalContext?: SignalEvidenceContext;
+  walletContext?: SignalEvidenceContext;
+}
 
 export function generateBtcSignal(
   closes: DailyClose[],
-  options: { now?: Date; walletContextScore?: string; volatilityKillThreshold?: string } = {},
+  options: GenerateBtcSignalOptions = {},
 ): GeneratedSignal {
-  if (closes.length < 51) throw new Error("At least 51 daily closes are required.");
+  if (closes.length < btcResearchRuleConfig.minimumCompletedCloses) {
+    throw new Error(
+      `At least ${btcResearchRuleConfig.minimumCompletedCloses} daily closes are required.`,
+    );
+  }
   const sorted = [...closes].sort((a, b) => a.date.localeCompare(b.date));
   const now = options.now ?? new Date();
   const latest = sorted.at(-1)!;
@@ -63,28 +102,55 @@ export function generateBtcSignal(
   );
   const meanReversionScore = rsiScore(rsi14);
   const volatilityScore = clamp(new Decimal(100).sub(volatility30));
-  const walletScore = clamp(new Decimal(options.walletContextScore ?? 50));
+  const institutionalScore = clamp(
+    new Decimal(
+      options.institutionalContext?.score ?? options.institutionalContextScore ?? 50,
+    ),
+  );
+  const walletScore = clamp(
+    new Decimal(options.walletContext?.score ?? options.walletContextScore ?? 50),
+  );
   const composite = momentumScore
     .mul(weights.momentum)
     .add(trendScore.mul(weights.trend))
     .add(meanReversionScore.mul(weights.meanReversion))
     .add(volatilityScore.mul(weights.volatility))
+    .add(institutionalScore.mul(weights.institutionalPositioning))
     .add(walletScore.mul(weights.wallets))
     .div(100);
-  const stale = now.getTime() - latest.observedAt.getTime() > 24 * 60 * 60 * 1000;
-  const riskKillSwitch = stale || volatility30.gt(options.volatilityKillThreshold ?? "95");
+  const stale =
+    now.getTime() - latest.observedAt.getTime() >
+    btcResearchRuleConfig.maximumDataAgeHours * 60 * 60 * 1000;
+  const sourceAvailable = options.marketSource?.available ?? true;
+  const volatilityKill = volatility30.gt(
+    options.volatilityKillThreshold ?? btcResearchRuleConfig.volatilityKillThreshold,
+  );
+  const riskKillSwitch = !sourceAvailable || stale || volatilityKill;
   const action: SignalAction = riskKillSwitch
     ? "WATCH"
-    : composite.gte(70)
+    : composite.gte(btcResearchRuleConfig.buyThreshold)
       ? "BUY"
-      : composite.lte(30)
+      : composite.lte(btcResearchRuleConfig.sellThreshold)
         ? "SELL"
         : "WATCH";
   const confidence = clamp(
-    new Decimal(55).add(Decimal.abs(composite.sub(50)).mul("0.6")).sub(stale ? 35 : 0),
+    new Decimal(55)
+      .add(Decimal.abs(composite.sub(50)).mul("0.6"))
+      .sub(!sourceAvailable || stale ? 35 : volatilityKill ? 20 : 0)
+      .sub(options.institutionalContext?.available === false ? 5 : 0),
   );
-  const freshness: Freshness = stale ? "STALE" : "FRESH";
-  const sourceUrl = "https://www.coingecko.com/en/coins/bitcoin/historical_data";
+  const freshness: Freshness = !sourceAvailable ? "MISSING" : stale ? "STALE" : "FRESH";
+  const sourceUrl =
+    options.marketSource?.sourceUrl ??
+    "https://www.coingecko.com/en/coins/bitcoin/historical_data";
+  const sourceLabel = options.marketSource?.label ?? "CoinGecko BTC daily history";
+  const sourceDetails = {
+    sourceLinks: options.marketSource?.sourceLinks,
+    sourceDeviationPct: options.marketSource?.deviationPct,
+  };
+  const marketEvidenceKind = sourceAvailable ? undefined : ("UNVERIFIED" as const);
+  const institutionalContext = options.institutionalContext;
+  const walletContext = options.walletContext;
 
   const evidence: GeneratedSignalEvidence[] = [
     {
@@ -94,11 +160,15 @@ export function generateBtcSignal(
       score: momentumScore.toFixed(2),
       value: `${signed(return7)}% / ${signed(return30)}%`,
       interpretation: "Recent and monthly returns are normalized into a bounded momentum score.",
-      source: "CoinGecko BTC daily history",
+      source: sourceLabel,
       sourceUrl,
       observedAt: latest.observedAt,
-      kind: "OBSERVED",
-      details: { return7dPct: return7.toString(), return30dPct: return30.toString() },
+      kind: marketEvidenceKind ?? "OBSERVED",
+      details: {
+        return7dPct: return7.toString(),
+        return30dPct: return30.toString(),
+        ...sourceDetails,
+      },
     },
     {
       group: "Trend",
@@ -107,11 +177,16 @@ export function generateBtcSignal(
       score: trendScore.toFixed(2),
       value: `${latestClose.toFixed(2)} / ${ma20.toFixed(2)} / ${ma50.toFixed(2)}`,
       interpretation: "Trend improves when price is above MA20 and MA20 is above MA50.",
-      source: "Calculated from CoinGecko daily closes",
+      source: `Calculated from ${sourceLabel}`,
       sourceUrl,
       observedAt: latest.observedAt,
-      kind: "CALCULATED",
-      details: { close: latestClose.toString(), ma20: ma20.toString(), ma50: ma50.toString() },
+      kind: marketEvidenceKind ?? "CALCULATED",
+      details: {
+        close: latestClose.toString(),
+        ma20: ma20.toString(),
+        ma50: ma50.toString(),
+        ...sourceDetails,
+      },
     },
     {
       group: "Mean reversion",
@@ -120,11 +195,11 @@ export function generateBtcSignal(
       score: meanReversionScore.toFixed(2),
       value: rsi14.toFixed(2),
       interpretation: "Very warm RSI reduces entry quality; oversold readings improve it.",
-      source: "Calculated from CoinGecko daily closes",
+      source: `Calculated from ${sourceLabel}`,
       sourceUrl,
       observedAt: latest.observedAt,
-      kind: "CALCULATED",
-      details: { rsi14: rsi14.toString() },
+      kind: marketEvidenceKind ?? "CALCULATED",
+      details: { rsi14: rsi14.toString(), ...sourceDetails },
     },
     {
       group: "Volatility risk",
@@ -133,24 +208,54 @@ export function generateBtcSignal(
       score: volatilityScore.toFixed(2),
       value: `${volatility30.toFixed(2)}% annualized`,
       interpretation: "Higher realized volatility lowers conviction and can activate the risk kill switch.",
-      source: "Calculated from CoinGecko daily closes",
+      source: `Calculated from ${sourceLabel}`,
       sourceUrl,
       observedAt: latest.observedAt,
-      kind: "CALCULATED",
-      details: { annualizedVolatilityPct: volatility30.toString() },
+      kind: marketEvidenceKind ?? "CALCULATED",
+      details: { annualizedVolatilityPct: volatility30.toString(), ...sourceDetails },
+    },
+    {
+      group: "CFTC institutional positioning",
+      rule: "CME BTC asset-manager net position and weekly change",
+      weightPct: weights.institutionalPositioning.toString(),
+      score: institutionalScore.toFixed(2),
+      value: institutionalContext?.value ?? `${institutionalScore.toFixed(2)} / 100`,
+      interpretation:
+        institutionalContext?.interpretation ??
+        "CFTC asset-manager positioning is a delayed institutional proxy, not verified intent or a spot-market trade.",
+      source:
+        institutionalContext?.source ??
+        "CFTC Traders in Financial Futures — CME Bitcoin futures only",
+      sourceUrl:
+        institutionalContext?.sourceUrl ??
+        "https://publicreporting.cftc.gov/Commitments-of-Traders/TFF-Futures-Only/gpe5-46if",
+      observedAt: institutionalContext?.observedAt ?? latest.observedAt,
+      kind: institutionalContext?.kind ?? "CALCULATED",
+      details: {
+        institutionalPositioningScore: institutionalScore.toString(),
+        sourceLinks: institutionalContext?.sourceLinks,
+        available: institutionalContext?.available,
+        ...institutionalContext?.details,
+      },
     },
     {
       group: "Public-wallet context",
       rule: "Observed qualified flows",
       weightPct: weights.wallets.toString(),
       score: walletScore.toFixed(2),
-      value: `${walletScore.toFixed(2)} / 100`,
-      interpretation: "Public-wallet flow is a contextual proxy and is never treated as verified identity.",
-      source: "Qualified public-wallet observations",
-      sourceUrl: "https://mempool.space/",
-      observedAt: latest.observedAt,
-      kind: "INFERRED",
-      details: { walletContextScore: walletScore.toString() },
+      value: walletContext?.value ?? `${walletScore.toFixed(2)} / 100`,
+      interpretation:
+        walletContext?.interpretation ??
+        "Public-wallet flow is a contextual proxy and is never treated as verified identity.",
+      source: walletContext?.source ?? "Qualified public-wallet observations",
+      sourceUrl: walletContext?.sourceUrl ?? "https://mempool.space/",
+      observedAt: walletContext?.observedAt ?? latest.observedAt,
+      kind: walletContext?.kind ?? "INFERRED",
+      details: {
+        walletContextScore: walletScore.toString(),
+        sourceLinks: walletContext?.sourceLinks,
+        ...walletContext?.details,
+      },
     },
   ];
 
@@ -161,7 +266,9 @@ export function generateBtcSignal(
     freshness,
     riskKillSwitch,
     summary: riskKillSwitch
-      ? stale
+      ? !sourceAvailable
+        ? "Independent market sources were missing or disagreed, so the risk kill switch forced WATCH."
+        : stale
         ? "Required market data is stale, so the risk kill switch forced WATCH."
         : "Realized volatility exceeded the configured threshold, so the risk kill switch forced WATCH."
       : action === "BUY"

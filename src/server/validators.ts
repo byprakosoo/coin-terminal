@@ -96,10 +96,56 @@ export const walletPatchSchema = z
   .object({
     label: z.string().trim().min(1).max(160).optional(),
     enabled: z.boolean().optional(),
+    classification: z.enum(["USER_VERIFIED", "UNVERIFIED_WHALE"]).optional(),
+    attestationAccepted: z.literal(true).optional(),
   })
-  .refine((value) => Object.keys(value).length > 0);
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.label === undefined &&
+      value.enabled === undefined &&
+      value.classification === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Provide at least one wallet field to update.",
+      });
+    }
+    if (value.classification === "USER_VERIFIED" && value.attestationAccepted !== true) {
+      context.addIssue({
+        code: "custom",
+        path: ["attestationAccepted"],
+        message: "Ownership or control attestation is required.",
+      });
+    }
+    if (value.attestationAccepted && value.classification !== "USER_VERIFIED") {
+      context.addIssue({
+        code: "custom",
+        path: ["attestationAccepted"],
+        message: "Attestation is only accepted with the self-attested classification.",
+      });
+    }
+  });
 
 export const alertPatchSchema = z.object({ read: z.boolean() });
+
+export const btcStrategyBudgetSchema = z.object({
+  sleeveBudgetUsd: decimal({ positive: true }),
+});
+
+export const signalReconciliationSchema = z
+  .object({
+    status: z.enum(["EXECUTED", "SKIPPED"]),
+    actualPriceUsd: decimal({ positive: true }).optional(),
+    actualQuantityBtc: decimal({ positive: true }).optional(),
+    actualFeeUsd: decimal({ nonnegative: true }).optional(),
+    executedAt: isoDate.optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.status !== "EXECUTED") return;
+    if (!value.actualPriceUsd) context.addIssue({ code: "custom", path: ["actualPriceUsd"], message: "Execution price is required." });
+    if (!value.actualQuantityBtc) context.addIssue({ code: "custom", path: ["actualQuantityBtc"], message: "BTC quantity is required." });
+  });
 
 export const conversationSchema = z.object({
   title: z.string().trim().min(1).max(255).default("New conversation"),

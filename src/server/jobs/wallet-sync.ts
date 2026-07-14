@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { walletEvents, watchlistWallets } from "@/db/schema";
 import { fetchEvmTokenTransfers } from "@/server/providers/etherscan";
@@ -20,6 +20,7 @@ export async function syncWalletActivity() {
         ),
       ),
     )
+    .orderBy(asc(watchlistWallets.lastCheckedAt), asc(watchlistWallets.id))
     .limit(50);
   let observed = 0;
   let inserted = 0;

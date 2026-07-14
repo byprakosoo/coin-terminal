@@ -32,12 +32,12 @@ export function EvidenceBadge({ value }: { value: EvidenceKind }) {
 
 export function WalletBadge({ value }: { value: WalletClassification }) {
   const labels: Record<WalletClassification, string> = {
-    USER_VERIFIED: "User verified",
+    USER_VERIFIED: "Self-attested",
     PUBLICLY_ATTRIBUTED: "Publicly attributed",
     HIGH_PERFORMANCE_PROXY: "Performance proxy",
     UNVERIFIED_WHALE: "Unverified whale",
     EXCLUDED: "Excluded",
   };
-  const variant = value === "HIGH_PERFORMANCE_PROXY" || value === "USER_VERIFIED" ? "success" : value === "PUBLICLY_ATTRIBUTED" ? "info" : value === "UNVERIFIED_WHALE" ? "warning" : "risk";
+  const variant = value === "HIGH_PERFORMANCE_PROXY" ? "success" : value === "PUBLICLY_ATTRIBUTED" ? "info" : value === "USER_VERIFIED" ? "neutral" : value === "UNVERIFIED_WHALE" ? "warning" : "risk";
   return <Badge variant={variant}>{labels[value]}</Badge>;
 }
