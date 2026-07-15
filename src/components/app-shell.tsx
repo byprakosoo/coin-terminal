@@ -32,7 +32,7 @@ import { useTerminalStore } from "@/store/terminal-store";
 
 const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard, eyebrow: "Command center" },
-  { href: "/portfolio", label: "Portfolio", icon: WalletCards, eyebrow: "Ledger & P&L" },
+  { href: "/portfolio", label: "Portfolio", icon: WalletCards, eyebrow: "Holdings & history" },
   { href: "/spending", label: "Spending", icon: CreditCard, eyebrow: "Cash flow" },
   { href: "/btc-research", label: "BTC Research", icon: Bitcoin, eyebrow: "Daily signal" },
   { href: "/smart-money", label: "Smart Money", icon: Sparkles, eyebrow: "Public-wallet proxy" },
