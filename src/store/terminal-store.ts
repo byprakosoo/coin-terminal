@@ -76,7 +76,7 @@ interface TerminalState extends WorkspacePayload {
 
 const initial: WorkspacePayload = {
   session: null,
-  profile: { id: "", name: "", email: "", timezone: "UTC", displayCurrency: "USD", disclaimerAccepted: false, onboardingComplete: false },
+  profile: { id: "", name: "", email: "", timezone: "UTC", displayCurrency: "IDR", disclaimerAccepted: false, onboardingComplete: false },
   prices: [],
   fxRates: [],
   transactions: [],

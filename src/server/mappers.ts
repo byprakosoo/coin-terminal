@@ -29,7 +29,7 @@ export function mapProfile(row: Row<typeof users>): UserProfile {
     name: row.name,
     email: row.email,
     timezone: row.timezone,
-    displayCurrency: row.displayCurrency,
+    displayCurrency: row.displayCurrency === "USD" ? "USD" : "IDR",
     disclaimerAccepted: row.disclaimerAccepted,
     onboardingComplete: row.onboardingComplete,
   };

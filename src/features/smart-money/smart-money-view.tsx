@@ -22,7 +22,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateTime, formatMoney, formatPct } from "@/lib/format";
 import { getTrackedWalletMetadata, walletExplorerUrl } from "@/lib/tracked-wallets";
-import type { EntryStatus, TokenFlowEvent, WatchlistWallet } from "@/lib/types";
+import type { DisplayCurrency, EntryStatus, TokenFlowEvent, WatchlistWallet } from "@/lib/types";
 import { shortAddress, relativeTime } from "@/lib/utils";
 import { useTerminalStore } from "@/store/terminal-store";
 
@@ -100,7 +100,7 @@ export function SmartMoneyView() {
   );
 }
 
-function EventCard({ event, onOpen, currency, rates }: { event: TokenFlowEvent; onOpen: () => void; currency: "USD" | "IDR" | "EUR"; rates: ReturnType<typeof useTerminalStore.getState>["fxRates"] }) {
+function EventCard({ event, onOpen, currency, rates }: { event: TokenFlowEvent; onOpen: () => void; currency: DisplayCurrency; rates: ReturnType<typeof useTerminalStore.getState>["fxRates"] }) {
   const risk = event.entryStatus === "EXTENDED" || event.entryStatus === "AVOID";
   return <button type="button" onClick={onOpen} className={`group rounded-lg border p-4 text-left transition hover:bg-accent/55 ${risk ? "border-risk/30 bg-risk/[0.025]" : "bg-background/35"}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className={`flex size-10 items-center justify-center rounded-lg border font-mono text-xs font-bold ${risk ? "border-risk/25 bg-risk/10 text-risk" : "border-primary/20 bg-primary/10 text-primary"}`}>{event.tokenSymbol.slice(0, 3)}</span><div><p className="text-sm font-medium">{event.tokenSymbol} <span className="font-normal text-muted-foreground">· {event.chain}</span></p><p className="mt-1 text-[10px] text-muted-foreground">{event.dexPair} · {relativeTime(event.evaluatedAt)}</p></div></div><EntryBadge value={event.entryStatus} /></div><div className="mt-4 grid grid-cols-3 gap-3 border-y py-3"><Tiny label="Net buy" value={formatMoney(event.netBuyUsd, currency, rates, true)} /><Tiny label="Wallets" value={String(event.qualifiedWalletCount)} /><Tiny label="Price move" value={formatPct(event.priceChangePct, true)} risk={risk} /></div><div className={`mt-3 flex items-start gap-2 text-[11px] leading-relaxed ${risk ? "text-risk" : "text-muted-foreground"}`}>{risk ? <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success" />}<span>{event.riskFactors[0]}</span><ArrowRight className="ml-auto mt-0.5 size-3.5 shrink-0 transition group-hover:translate-x-0.5" /></div></button>;
 }

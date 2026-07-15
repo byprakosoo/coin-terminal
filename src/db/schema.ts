@@ -33,7 +33,7 @@ export const users = mysqlTable(
     image: text("image"),
     displayCurrency: mysqlEnum("display_currency", ["USD", "IDR", "EUR"])
       .notNull()
-      .default("USD"),
+      .default("IDR"),
     timezone: varchar("timezone", { length: 80 }).notNull().default("UTC"),
     disclaimerAccepted: boolean("disclaimer_accepted").notNull().default(false),
     onboardingComplete: boolean("onboarding_complete").notNull().default(false),

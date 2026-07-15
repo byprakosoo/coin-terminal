@@ -37,7 +37,7 @@ export const profileUpdateSchema = z
           return false;
         }
       }, "Enter a valid IANA timezone."),
-    displayCurrency: z.enum(["USD", "IDR", "EUR"]),
+    displayCurrency: z.enum(["USD", "IDR"]),
     disclaimerAccepted: z.literal(true).optional(),
     onboardingComplete: z.boolean().optional(),
   })

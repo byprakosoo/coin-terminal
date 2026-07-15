@@ -65,10 +65,11 @@ export async function sendConversationMessage(
     .where(eq(aiMessages.conversationId, conversationId))
     .orderBy(desc(aiMessages.createdAt))
     .limit(8);
-  const groundedReply = buildAssistantReply(content, workspace);
+  const assistantContext = { ...workspace, displayCurrency: workspace.profile.displayCurrency };
+  const groundedReply = buildAssistantReply(content, assistantContext);
   const generation = await generateAssistantAnswer({
     question: content,
-    context: workspace,
+    context: assistantContext,
     groundedReply,
     history: historyRows.reverse(),
   });

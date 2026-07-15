@@ -52,7 +52,7 @@ export function createDemoData(now = Date.now()): DemoData {
     name: "Alex Morgan",
     email: "alex@example.com",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    displayCurrency: "USD",
+    displayCurrency: "IDR",
     disclaimerAccepted: false,
     onboardingComplete: false,
   };

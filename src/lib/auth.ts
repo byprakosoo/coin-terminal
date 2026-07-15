@@ -41,7 +41,7 @@ export const auth = betterAuth({
       displayCurrency: {
         type: "string",
         required: true,
-        defaultValue: "USD",
+        defaultValue: "IDR",
         input: false,
       },
       timezone: {

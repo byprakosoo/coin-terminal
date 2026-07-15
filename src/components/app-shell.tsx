@@ -26,9 +26,12 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, initials, relativeTime } from "@/lib/utils";
+import type { DisplayCurrency } from "@/lib/types";
 import { useTerminalStore } from "@/store/terminal-store";
+import { toast } from "sonner";
 
 const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard, eyebrow: "Command center" },
@@ -53,6 +56,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const markAlertRead = useTerminalStore((state) => state.markAlertRead);
   const markAllAlertsRead = useTerminalStore((state) => state.markAllAlertsRead);
   const signOut = useTerminalStore((state) => state.signOut);
+  const updateProfile = useTerminalStore((state) => state.updateProfile);
+  const [currencySaving, setCurrencySaving] = useState(false);
   const unreadCount = alerts.filter((alert) => !alert.readAt).length;
   const current = navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 
@@ -67,6 +72,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const handleSignOut = async () => {
     await signOut();
     router.replace("/sign-in");
+  };
+
+  const changeCurrency = async (value: string) => {
+    const currency = value as DisplayCurrency;
+    setCurrencySaving(true);
+    try {
+      await updateProfile({ displayCurrency: currency });
+    } catch (error) {
+      toast.error("Currency could not be changed", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setCurrencySaving(false);
+    }
   };
 
   return (
@@ -98,6 +115,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Select value={profile.displayCurrency} onValueChange={(value) => void changeCurrency(value)} disabled={currencySaving}>
+              <SelectTrigger className="h-8 w-[4.8rem] text-[10px]" aria-label="Display currency"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="IDR">IDR</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent>
+            </Select>
             <DemoBadge />
             <div className="hidden items-center gap-1.5 rounded-full border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground md:flex"><span className="size-1.5 rounded-full bg-success shadow-[0_0_8px_rgb(66_213_165/0.7)]" />Backend connected</div>
             <Button variant="ghost" size="icon" className="relative" onClick={() => setAlertsOpen(true)} aria-label={`${unreadCount} unread alerts`}>

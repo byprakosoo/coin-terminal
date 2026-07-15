@@ -1,5 +1,6 @@
 export type DecimalString = string;
-export type DisplayCurrency = "USD" | "IDR" | "EUR";
+export type DisplayCurrency = "USD" | "IDR";
+export type SupportedCurrency = DisplayCurrency | "EUR";
 export type Freshness = "FRESH" | "DELAYED" | "STALE" | "MISSING";
 export type EvidenceKind =
   | "OBSERVED"
@@ -42,7 +43,7 @@ export interface MarketPrice {
 }
 
 export interface FxRate {
-  currency: DisplayCurrency;
+  currency: SupportedCurrency;
   usdRate: DecimalString;
   observedAt: string;
   freshness: Freshness;
@@ -92,7 +93,7 @@ export interface SpendingTransaction {
   id: string;
   occurredOn: string;
   amount: DecimalString;
-  currency: DisplayCurrency;
+  currency: SupportedCurrency;
   direction: SpendingDirection;
   category: string;
   account: string;

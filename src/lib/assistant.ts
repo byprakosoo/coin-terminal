@@ -2,12 +2,13 @@ import Decimal from "decimal.js";
 import { calculatePortfolio, calculateSpending } from "@/lib/calculations";
 import { defensiveRuleVersion } from "@/lib/btc-defensive-strategy";
 import { btcResearchRuleVersion } from "@/lib/btc-research-rule";
-import { formatMoney, formatPct, monthKey, previousMonth } from "@/lib/format";
+import { formatMoney as formatMoneyValue, formatPct, monthKey, previousMonth } from "@/lib/format";
 import type {
   AssistantToolName,
   BtcSignal,
   Freshness,
   FxRate,
+  DisplayCurrency,
   MarketPrice,
   PortfolioTransaction,
   SourceReceipt,
@@ -22,6 +23,7 @@ export interface AssistantContext {
   signals: BtcSignal[];
   events: TokenFlowEvent[];
   fxRates?: FxRate[];
+  displayCurrency?: DisplayCurrency;
 }
 
 export interface AssistantReply {
@@ -48,6 +50,9 @@ function receipt(
 }
 
 export function buildAssistantReply(question: string, context: AssistantContext): AssistantReply {
+  const displayCurrency = context.displayCurrency ?? "USD";
+  const formatMoney = (value: string | number, currency = displayCurrency, rates = context.fxRates, compact = false) =>
+    formatMoneyValue(value, currency, rates, compact);
   const normalized = question.toLowerCase();
   const portfolio = calculatePortfolio(context.transactions, context.prices);
   const defensiveSignal = context.signals.find(
@@ -130,7 +135,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     }
     const eventFreshness = freshnessFromTimestamp(event.evaluatedAt);
     return {
-      content: `The highest-priority observed event is ${event.tokenSymbol} on ${event.chain}, labeled ${event.entryStatus}. ${event.qualifiedWalletCount} qualified public-wallet proxies net-bought about ${formatMoney(event.netBuyUsd, "USD", undefined, true)}, while price moved ${formatPct(event.priceChangePct)} since first detection. Key risk: ${event.riskFactors[0] ?? "Wallet identity and intent are not independently verified."} This is a public-wallet proxy, not proof of institutional or insider activity.`,
+      content: `The highest-priority observed event is ${event.tokenSymbol} on ${event.chain}, labeled ${event.entryStatus}. ${event.qualifiedWalletCount} qualified public-wallet proxies net-bought about ${formatMoney(event.netBuyUsd, displayCurrency, context.fxRates, true)}, while price moved ${formatPct(event.priceChangePct)} since first detection. Key risk: ${event.riskFactors[0] ?? "Wallet identity and intent are not independently verified."} This is a public-wallet proxy, not proof of institutional or insider activity.`,
       toolName: "getSmartMoneyEvents",
       sources: [receipt("Public-wallet events + DEX market snapshot", event.evaluatedAt, "INFERRED", eventFreshness, "Latest 24-hour wallet window")],
       investmentRelated: true,

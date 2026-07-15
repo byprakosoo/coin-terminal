@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
-import type { DecimalString, DisplayCurrency, FxRate } from "@/lib/types";
+import type { DecimalString, DisplayCurrency, FxRate, SupportedCurrency } from "@/lib/types";
 
-const symbols: Record<DisplayCurrency, string> = {
+const symbols: Record<SupportedCurrency, string> = {
   USD: "$",
   IDR: "Rp",
   EUR: "€",
@@ -9,7 +9,7 @@ const symbols: Record<DisplayCurrency, string> = {
 
 export function formatMoney(
   usdValue: DecimalString | number,
-  currency: DisplayCurrency = "USD",
+  currency: DisplayCurrency = "IDR",
   rates?: FxRate[],
   compact = false,
 ) {
@@ -27,7 +27,7 @@ export function formatMoney(
     .replace("IDR", symbols.IDR);
 }
 
-export function formatNativeMoney(value: DecimalString | number, currency: DisplayCurrency) {
+export function formatNativeMoney(value: DecimalString | number, currency: SupportedCurrency) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
