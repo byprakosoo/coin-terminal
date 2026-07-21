@@ -139,6 +139,7 @@ export const importBatches = mysqlTable(
       .default("PREVIEW"),
     fileName: varchar("file_name", { length: 255 }).notNull(),
     checksum: char("checksum", { length: 64 }).notNull(),
+    reportMonth: char("report_month", { length: 7 }),
     mapping: json("mapping").$type<Record<string, string>>(),
     acceptedRows: int("accepted_rows").notNull().default(0),
     duplicateRows: int("duplicate_rows").notNull().default(0),
@@ -148,7 +149,7 @@ export const importBatches = mysqlTable(
   },
   (table) => [
     index("import_batches_user_created_idx").on(table.userId, table.createdAt),
-    uniqueIndex("import_batches_user_checksum_unique").on(table.userId, table.source, table.checksum),
+    index("import_batches_user_checksum_idx").on(table.userId, table.source, table.checksum),
   ],
 );
 
@@ -225,6 +226,7 @@ export const spendingTransactions = mysqlTable(
       onDelete: "set null",
     }),
     occurredOn: date("occurred_on", { mode: "string" }).notNull(),
+    reportMonth: char("report_month", { length: 7 }).notNull(),
     amount: money("amount").notNull(),
     currency: mysqlEnum("currency", ["USD", "IDR", "EUR"]).notNull(),
     direction: mysqlEnum("direction", ["INCOME", "EXPENSE"]).notNull(),
@@ -240,10 +242,149 @@ export const spendingTransactions = mysqlTable(
   },
   (table) => [
     index("spending_transactions_user_date_idx").on(table.userId, table.occurredOn),
+    index("spending_transactions_user_report_month_idx").on(table.userId, table.reportMonth),
     uniqueIndex("spending_transactions_user_fingerprint_unique").on(
       table.userId,
       table.fingerprint,
     ),
+  ],
+);
+
+export const spendingCarryovers = mysqlTable(
+  "spending_carryovers",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reportMonth: char("report_month", { length: 7 }).notNull(),
+    amountUsd: money("amount_usd").notNull(),
+    direction: mysqlEnum("direction", ["INCOME", "EXPENSE"]).notNull(),
+    status: mysqlEnum("status", ["ACTIVE", "DELETED"]).notNull().default("ACTIVE"),
+    note: text("note"),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("spending_carryovers_user_month_unique").on(table.userId, table.reportMonth),
+  ],
+);
+
+/** Immutable, user-owned Income History / month-end allocation records. */
+export const portfolioRecapSnapshots = mysqlTable(
+  "portfolio_recap_snapshots",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    asOfDate: date("as_of_date", { mode: "string" }).notNull(),
+    sequence: int("sequence").notNull(),
+    bankIdr: money("bank_idr").notNull().default("0"),
+    rdpuIdr: money("rdpu_idr").notNull().default("0"),
+    ihsgIdr: money("ihsg_idr").notNull().default("0"),
+    sp500Idr: money("sp500_idr").notNull().default("0"),
+    btcIdr: money("btc_idr").notNull().default("0"),
+    ethIdr: money("eth_idr").notNull().default("0"),
+    altcoinIdr: money("altcoin_idr").notNull().default("0"),
+    goldIdr: money("gold_idr").notNull().default("0"),
+    idrPerUsd: money("idr_per_usd"),
+    source: mysqlEnum("source", ["MANUAL", "HYBRID_PREFILL", "XLSX_IMPORT"])
+      .notNull()
+      .default("MANUAL"),
+    prefillMetadata: json("prefill_metadata").$type<Record<string, unknown>>(),
+    note: text("note"),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("portfolio_recap_snapshots_user_date_sequence_unique").on(
+      table.userId,
+      table.asOfDate,
+      table.sequence,
+    ),
+    index("portfolio_recap_snapshots_user_date_idx").on(table.userId, table.asOfDate),
+  ],
+);
+
+export const goldTransactions = mysqlTable(
+  "gold_transactions",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    transactionType: mysqlEnum("transaction_type", ["BUY", "SELL"]).notNull(),
+    occurredOn: date("occurred_on", { mode: "string" }).notNull(),
+    goldType: varchar("gold_type", { length: 120 }).notNull(),
+    grams: quantity("grams").notNull(),
+    unitPriceIdr: money("unit_price_idr").notNull(),
+    venue: varchar("venue", { length: 160 }),
+    note: text("note"),
+    fingerprint: char("fingerprint", { length: 64 }),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("gold_transactions_user_date_idx").on(table.userId, table.occurredOn),
+    uniqueIndex("gold_transactions_user_fingerprint_unique").on(table.userId, table.fingerprint),
+  ],
+);
+
+export const goldValuations = mysqlTable(
+  "gold_valuations",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    asOfDate: date("as_of_date", { mode: "string" }).notNull(),
+    pricePerGramIdr: money("price_per_gram_idr").notNull(),
+    source: mysqlEnum("source", ["MANUAL", "XLSX_IMPORT"]).notNull().default("MANUAL"),
+    note: text("note"),
+    fingerprint: char("fingerprint", { length: 64 }),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("gold_valuations_user_date_idx").on(table.userId, table.asOfDate),
+    uniqueIndex("gold_valuations_user_fingerprint_unique").on(table.userId, table.fingerprint),
+  ],
+);
+
+export const annualRecapSettings = mysqlTable(
+  "annual_recap_settings",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    year: int("year").notNull(),
+    monthlySalaryIdr: money("monthly_salary_idr"),
+    closingSnapshotId: id("closing_snapshot_id").references(() => portfolioRecapSnapshots.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("annual_recap_settings_user_year_unique").on(table.userId, table.year),
+    index("annual_recap_settings_closing_snapshot_idx").on(table.closingSnapshotId),
   ],
 );
 

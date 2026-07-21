@@ -14,6 +14,7 @@ import {
   signalEvidence,
   signalRuleVersions,
   signals,
+  spendingCarryovers,
   spendingTransactions,
   tokenFlowEvents,
   tokenFlowEventWallets,
@@ -41,6 +42,7 @@ import {
   mapMessage,
   mapPortfolioTransaction,
   mapProfile,
+  mapSpendingCarryover,
   mapSpendingTransaction,
   mapWallet,
 } from "@/server/mappers";
@@ -271,6 +273,7 @@ export async function seedDemoWorkspace(userId: string) {
       id: stableId(userId, item.id),
       userId,
       occurredOn: item.occurredOn,
+      reportMonth: item.reportMonth ?? item.occurredOn.slice(0, 7),
       amount: item.amount,
       currency: item.currency,
       direction: item.direction,
@@ -497,6 +500,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     profileRows,
     transactionRows,
     spendingRows,
+    carryoverRows,
     walletRows,
     eventRows,
     eventWalletRows,
@@ -521,6 +525,11 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
       .from(spendingTransactions)
       .where(eq(spendingTransactions.userId, userId))
       .orderBy(desc(spendingTransactions.occurredOn)),
+    db
+      .select()
+      .from(spendingCarryovers)
+      .where(eq(spendingCarryovers.userId, userId))
+      .orderBy(desc(spendingCarryovers.reportMonth)),
     db
       .select()
       .from(watchlistWallets)
@@ -662,7 +671,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     prices: latestPrices(snapshotRows),
     fxRates: latestFxRates(snapshotRows),
     transactions: transactionRows.map(mapPortfolioTransaction),
-    spending: spendingRows.map(mapSpendingTransaction),
+    spending: [...spendingRows.map(mapSpendingTransaction), ...carryoverRows.map(mapSpendingCarryover)],
     signals: btcSignals,
     marketHistory: marketHistory(snapshotRows),
     wallets: walletRows.map(mapWallet),
@@ -790,6 +799,7 @@ export async function clearUserWorkspace(userId: string) {
     await tx.delete(importBatches).where(eq(importBatches.userId, userId));
     await tx.delete(portfolioTransactions).where(eq(portfolioTransactions.userId, userId));
     await tx.delete(spendingTransactions).where(eq(spendingTransactions.userId, userId));
+    await tx.delete(spendingCarryovers).where(eq(spendingCarryovers.userId, userId));
     await tx.delete(alerts).where(eq(alerts.userId, userId));
     await tx.delete(tokenFlowEvents).where(eq(tokenFlowEvents.userId, userId));
     await tx.delete(watchlistWallets).where(eq(watchlistWallets.userId, userId));

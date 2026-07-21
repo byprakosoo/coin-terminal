@@ -15,6 +15,7 @@ import type {
   alerts,
   importBatches,
   portfolioTransactions,
+  spendingCarryovers,
   spendingTransactions,
   tokenFlowEvents,
   users,
@@ -58,6 +59,7 @@ export function mapSpendingTransaction(
   return {
     id: row.id,
     occurredOn: row.occurredOn,
+    reportMonth: row.reportMonth,
     amount: row.amount,
     currency: row.currency,
     direction: row.direction,
@@ -65,6 +67,22 @@ export function mapSpendingTransaction(
     account: row.account,
     note: row.note ?? undefined,
     fingerprint: row.fingerprint ?? undefined,
+  };
+}
+
+export function mapSpendingCarryover(row: Row<typeof spendingCarryovers>): SpendingTransaction {
+  return {
+    id: row.id,
+    occurredOn: `${row.reportMonth}-01`,
+    reportMonth: row.reportMonth,
+    entryType: "CARRYOVER",
+    deleted: row.status === "DELETED",
+    amount: row.amountUsd,
+    currency: "USD",
+    direction: row.direction,
+    category: "Net Savings Carryover",
+    account: "Carryover",
+    note: row.note ?? "From previous report",
   };
 }
 

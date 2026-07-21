@@ -137,9 +137,12 @@ export function calculateSpending(
   month: string,
   rates: FxRate[] = [],
 ): SpendingSummary {
-  const current = transactions.filter((item) => item.occurredOn.startsWith(month));
+  const reportMonth = (item: SpendingTransaction) => item.reportMonth ?? item.occurredOn.slice(0, 7);
+  const standard = transactions.filter((item) => item.entryType !== "CARRYOVER");
+  const carryoverSettings = transactions.filter((item) => item.entryType === "CARRYOVER");
+  const current = standard.filter((item) => reportMonth(item) === month);
   const priorKey = previousMonth(month);
-  const prior = transactions.filter((item) => item.occurredOn.startsWith(priorKey));
+  const prior = standard.filter((item) => reportMonth(item) === priorKey);
   const sum = (items: SpendingTransaction[], direction: "INCOME" | "EXPENSE") =>
     sumDecimals(
       items
@@ -148,8 +151,17 @@ export function calculateSpending(
     );
   const income = sum(current, "INCOME");
   const expenses = sum(current, "EXPENSE");
+  const currentSavings = income.sub(expenses);
   const priorIncome = sum(prior, "INCOME");
   const priorExpenses = sum(prior, "EXPENSE");
+  const carryoverSetting = carryoverSettings.find((item) => reportMonth(item) === month);
+  const carriedSavings = carryoverSetting
+    ? carryoverSetting.deleted
+      ? new Decimal(0)
+      : new Decimal(spendingAmountToUsd(carryoverSetting.amount, carryoverSetting.currency, rates))
+        .mul(carryoverSetting.direction === "EXPENSE" ? -1 : 1)
+    : priorIncome.sub(priorExpenses);
+  const endingSavings = carriedSavings.add(currentSavings);
   const categories = new Map<string, Decimal>();
   current
     .filter((item) => item.direction === "EXPENSE")
@@ -166,8 +178,10 @@ export function calculateSpending(
     month,
     incomeUsd: income.toString(),
     expensesUsd: expenses.toString(),
-    savingsUsd: income.sub(expenses).toString(),
-    savingsRatePct: income.gt(0) ? income.sub(expenses).div(income).mul(100).toString() : "0",
+    savingsUsd: currentSavings.toString(),
+    carriedSavingsUsd: carriedSavings.toString(),
+    endingSavingsUsd: endingSavings.toString(),
+    savingsRatePct: income.gt(0) ? currentSavings.div(income).mul(100).toString() : "0",
     previousIncomeUsd: priorIncome.toString(),
     previousExpensesUsd: priorExpenses.toString(),
     expenseChangePct: priorExpenses.gt(0)

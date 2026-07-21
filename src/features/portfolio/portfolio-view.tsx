@@ -36,7 +36,7 @@ export function PortfolioView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const currentTab: PortfolioTab = portfolioTabs.includes(requestedTab as PortfolioTab) ? requestedTab as PortfolioTab : "live";
+  const currentTab: PortfolioTab = portfolioTabs.includes(requestedTab as PortfolioTab) ? requestedTab as PortfolioTab : "history";
   const transactions = useTerminalStore((state) => state.transactions);
   const prices = useTerminalStore((state) => state.prices);
   const profile = useTerminalStore((state) => state.profile);
@@ -71,7 +71,7 @@ export function PortfolioView() {
   };
   const setTab = (next: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "live") params.delete("tab"); else params.set("tab", next);
+    if (next === "history") params.delete("tab"); else params.set("tab", next);
     router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
   };
 
@@ -80,13 +80,14 @@ export function PortfolioView() {
       <PageHeader eyebrow="Holdings & history" title="Portfolio" description="Track live holdings and transactions, then review your month-end financial history in the same workspace." actions={currentTab === "live" ? <><Button variant="outline" size="sm" onClick={() => setImportOpen(true)}><FileUp />Import CSV</Button><Button size="sm" onClick={() => { setEditing(undefined); setFormOpen(true); }}><Plus />Add transaction</Button></> : <Badge variant="info">Portfolio history</Badge>} />
       <Tabs value={currentTab} onValueChange={setTab}>
         <TabsList className="h-auto max-w-full overflow-x-auto">
-          <TabsTrigger value="live">Live portfolio</TabsTrigger>
           <TabsTrigger value="history">Monthly history</TabsTrigger>
+          <TabsTrigger value="live">Crypto</TabsTrigger>
           <TabsTrigger value="gold">Gold</TabsTrigger>
           <TabsTrigger value="annual">Annual</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
         </TabsList>
         <TabsContent value="live">
+          <div className="space-y-6">
       {summary.incompleteBasis && <div className="flex gap-3 rounded-lg border border-warning/25 bg-warning/[0.045] p-4"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /><div><p className="text-sm font-medium">Incomplete cost basis</p><p className="mt-1 text-xs text-muted-foreground">At least one incoming transfer, reward, or airdrop has no acquisition price. Affected P&L remains provisional.</p></div></div>}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard label="Current value" value={formatMoney(summary.totalValueUsd, currency, rates)} trend={formatPct(summary.dailyChangePct, true)} trendDirection={new Decimal(summary.dailyChangePct).gte(0) ? "up" : "down"} detail="24h weighted" />
@@ -104,6 +105,7 @@ export function PortfolioView() {
         <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between"><SectionHeader title="Transaction ledger" description={`${filtered.length} of ${transactions.length} records shown.`} /><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><div className="relative sm:w-56"><Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search asset or venue" className="pl-9" /></div><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All types</SelectItem>{types.map((type) => <SelectItem key={type} value={type}>{type.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select><Button variant="outline" size="icon" onClick={exportCsv} aria-label="Export transaction CSV"><Download /></Button></div></CardHeader>
         <CardContent className="px-0"><Table><TableHeader><TableRow><TableHead className="pl-5">Date</TableHead><TableHead>Type</TableHead><TableHead>Asset</TableHead><TableHead>Quantity</TableHead><TableHead>Execution price</TableHead><TableHead>Fee</TableHead><TableHead>Venue</TableHead><TableHead className="pr-5 text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{filtered.map((transaction) => <TableRow key={transaction.id}><TableCell className="pl-5 text-xs"><p>{formatDateTime(transaction.executedAt, profile.timezone)}</p>{transaction.note && <p className="mt-1 max-w-44 truncate text-[10px] text-muted-foreground">{transaction.note}</p>}</TableCell><TableCell><TransactionBadge type={transaction.transactionType} /></TableCell><TableCell className="font-medium">{transaction.assetSymbol}</TableCell><TableCell className="numeric">{formatDecimal(transaction.quantity)}</TableCell><TableCell className="numeric">{formatMoney(transaction.unitPriceUsd, currency, rates)}</TableCell><TableCell className="numeric text-muted-foreground">{formatMoney(transaction.feeUsd, currency, rates)}</TableCell><TableCell className="text-xs text-muted-foreground">{transaction.venue}</TableCell><TableCell className="pr-5 text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Transaction actions"><Ellipsis /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { setEditing(transaction); setFormOpen(true); }}><Pencil />Edit record</DropdownMenuItem><DropdownMenuItem destructive onSelect={() => setDeleting(transaction)}><Trash2 />Delete record</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>)}{!filtered.length && <TableRow><TableCell colSpan={8} className="h-28 text-center text-muted-foreground">No matching transactions.</TableCell></TableRow>}</TableBody></Table></CardContent>
       </Card>
+          </div>
         </TabsContent>
         <TabsContent value="history"><PortfolioRecapView embedded forcedTab="monthly" /></TabsContent>
         <TabsContent value="gold"><PortfolioRecapView embedded forcedTab="gold" /></TabsContent>

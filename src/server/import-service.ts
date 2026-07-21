@@ -31,12 +31,16 @@ export async function previewImport(input: {
   kind: ImportKind;
   file: File;
   mapping: ImportMapping;
+  reportMonth?: string;
 }) {
   validateFile(input.file);
   for (const field of requiredMappings[input.kind]) {
     if (!input.mapping[field]) {
       throw new ApiError(422, `Required mapping is missing: ${field}.`, "VALIDATION_ERROR");
     }
+  }
+  if (input.kind === "spending" && !/^\d{4}-(0[1-9]|1[0-2])$/.test(input.reportMonth ?? "")) {
+    throw new ApiError(422, "Choose a valid report month before importing.", "VALIDATION_ERROR");
   }
 
   const contents = await input.file.arrayBuffer();
@@ -50,36 +54,6 @@ export async function previewImport(input: {
   }
 
   const source = input.kind === "spending" ? "MONEY_LOVER" : "PORTFOLIO_CSV";
-  const [existingBatch] = await db
-    .select()
-    .from(importBatches)
-    .where(
-      and(
-        eq(importBatches.userId, input.userId),
-        eq(importBatches.source, source),
-        eq(importBatches.checksum, checksum),
-      ),
-    )
-    .limit(1);
-  if (existingBatch) {
-    if (existingBatch.status === "PREVIEW") {
-      // A preview is disposable staging data. Re-parse the same file so mapping
-      // changes and parser fixes cannot be hidden by stale validation results.
-      await db
-        .delete(importBatches)
-        .where(
-          and(eq(importBatches.id, existingBatch.id), eq(importBatches.userId, input.userId)),
-        );
-    } else {
-      throw new ApiError(
-        409,
-        "This CSV file has already been imported.",
-        "DUPLICATE_IMPORT",
-        { batchId: existingBatch.id },
-      );
-    }
-  }
-
   const existingFingerprints = await loadFingerprints(input.userId, input.kind);
   const seen = new Set<string>();
   const rows = parsed.data.map((raw, index) => {
@@ -112,6 +86,19 @@ export async function previewImport(input: {
     duplicate: rows.filter((row) => row.status === "DUPLICATE").length,
     invalid: rows.filter((row) => row.status === "INVALID").length,
   };
+  const acceptedMonths = input.kind === "spending"
+    ? Array.from(
+      rows.reduce((months, row) => {
+        if (row.status !== "ACCEPTED") return months;
+        const occurredOn = String((row.normalized as Record<string, unknown>).occurredOn ?? "");
+        const month = occurredOn.slice(0, 7);
+        if (/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) months.set(month, (months.get(month) ?? 0) + 1);
+        return months;
+      }, new Map<string, number>()),
+    )
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, accepted]) => ({ month, accepted }))
+    : [];
   const batchId = createId();
 
   await db.transaction(async (tx) => {
@@ -122,6 +109,7 @@ export async function previewImport(input: {
       status: "PREVIEW",
       fileName: input.file.name,
       checksum,
+      reportMonth: input.kind === "spending" ? input.reportMonth : null,
       mapping: input.mapping,
       acceptedRows: counts.accepted,
       duplicateRows: counts.duplicate,
@@ -143,6 +131,7 @@ export async function previewImport(input: {
     fileName: input.file.name,
     source,
     ...counts,
+    acceptedMonths,
     rows: rows.slice(0, 200).map((row) => ({
       rowNumber: row.rowNumber,
       status: row.status,
@@ -220,6 +209,7 @@ export async function confirmImport(userId: string, batchId: string) {
           userId,
           importBatchId: batchId,
           occurredOn: String(item.occurredOn),
+          reportMonth: batch.reportMonth ?? String(item.occurredOn).slice(0, 7),
           amount: new Decimal(String(item.amount)).abs().toString(),
           currency: item.currency as "USD" | "IDR" | "EUR",
           direction: item.direction as "INCOME" | "EXPENSE",

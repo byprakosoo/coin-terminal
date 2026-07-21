@@ -1,0 +1,177 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js 16 (App Router, React 19)
+  - Tailwind CSS with Radix UI / shadcn-style components
+  - Drizzle ORM (MySQL/TiDB), Better Auth, Recharts, Zustand, react-hook-form, zod, decimal.js
+routes:
+  - path: /
+    file: src/app/page.tsx
+    auth_required: false
+    description: "Server-side redirect: unauthenticated users go to /sign-in; authenticated users with complete onboarding go to /overview, otherwise /onboarding. No visible landing content."
+  - path: /register
+    file: src/app/register/page.tsx
+    auth_required: false
+    description: "Public registration page rendering an email/password sign-up form (AuthPage mode=register)."
+  - path: /sign-in
+    file: src/app/sign-in/page.tsx
+    auth_required: false
+    description: "Public sign-in page rendering an email/password login form (AuthPage mode=sign-in)."
+  - path: /onboarding
+    file: src/app/onboarding/page.tsx
+    auth_required: true
+    description: "Post-registration setup page; redirects unauthenticated users to /sign-in."
+  - path: /overview
+    file: src/app/(terminal)/overview/page.tsx
+    auth_required: true
+    description: "Authenticated dashboard overview."
+  - path: /portfolio
+    file: src/app/(terminal)/portfolio/page.tsx
+    auth_required: true
+    description: "Authenticated portfolio ledger and analytics."
+  - path: /spending
+    file: src/app/(terminal)/spending/page.tsx
+    auth_required: true
+    description: "Authenticated spending analysis."
+  - path: /btc-research
+    file: src/app/(terminal)/btc-research/page.tsx
+    auth_required: true
+    description: "Authenticated BTC research and daily signal view."
+  - path: /smart-money
+    file: src/app/(terminal)/smart-money/page.tsx
+    auth_required: true
+    description: "Authenticated smart-money wallet activity view."
+  - path: /ask-portfolio
+    file: src/app/(terminal)/ask-portfolio/page.tsx
+    auth_required: true
+    description: "Authenticated AI portfolio assistant."
+  - path: /settings
+    file: src/app/(terminal)/settings/page.tsx
+    auth_required: true
+    description: "Authenticated user settings."
+features:
+  - name: User Registration
+    description: "Create a private workspace with email and password using Better Auth. Validates email format and enforces a minimum password length of 8 characters."
+    files:
+      - src/app/register/page.tsx
+      - src/components/auth-page.tsx
+      - src/lib/auth-client.ts
+    entry_route: /register
+    user_interactions:
+      - Navigate to the /register page
+      - Optionally fill the Full name field
+      - Fill the Email field
+      - Fill the Password field
+      - Submit by clicking the Continue to setup button
+      - Observe inline validation errors when the email is invalid or the password is shorter than 8 characters
+      - On successful registration get redirected to /onboarding
+      - Click the Sign in link to switch to the /sign-in page
+    api_calls:
+      - method: POST
+        endpoint: /api/auth/[...all]
+    auth_required: false
+  - name: User Sign-in
+    description: "Sign in to an existing workspace with email and password via Better Auth. On success the user is redirected to /overview when onboarding is complete, otherwise to /onboarding."
+    files:
+      - src/app/sign-in/page.tsx
+      - src/components/auth-page.tsx
+      - src/lib/auth-client.ts
+    entry_route: /sign-in
+    user_interactions:
+      - Navigate to the /sign-in page
+      - Fill the Email field
+      - Fill the Password field
+      - Submit by clicking the Open terminal button
+      - Observe a server error message when credentials are invalid
+      - On successful sign-in get redirected to /overview or /onboarding
+      - Click the Create account link to switch to the /register page
+    api_calls:
+      - method: POST
+        endpoint: /api/auth/[...all]
+    auth_required: false
+  - name: Health Check API
+    description: "Public unauthenticated health endpoint that verifies database connectivity. Returns 200 with status ok when the database is reachable, or 503 with status degraded when it is not."
+    files:
+      - src/app/api/health/route.ts
+    entry_route: /api/health
+    user_interactions:
+      - Send a GET request to /api/health
+      - Expect a 200 response with a JSON body containing status ok and database reachable
+    api_calls:
+      - method: GET
+        endpoint: /api/health
+    auth_required: false
+  - name: Overview Dashboard
+    description: "Authenticated dashboard summarizing portfolio, spending, and data-quality status."
+    files:
+      - src/app/(terminal)/overview/page.tsx
+    entry_route: /overview
+    user_interactions:
+      - Requires an authenticated session
+    api_calls:
+      - method: GET
+        endpoint: /api/workspace
+    auth_required: true
+  - name: Portfolio Ledger
+    description: "Authenticated CRUD for BUY, SELL, TRANSFER, REWARD, AIRDROP, and FEE transactions with import/export and analytics."
+    files:
+      - src/app/(terminal)/portfolio/page.tsx
+    entry_route: /portfolio
+    user_interactions:
+      - Requires an authenticated session
+    api_calls:
+      - method: GET
+        endpoint: /api/portfolio/transactions
+    auth_required: true
+  - name: Spending Analysis
+    description: "Authenticated income, expense, category, and month-over-month spending analysis with Money Lover CSV import preview."
+    files:
+      - src/app/(terminal)/spending/page.tsx
+    entry_route: /spending
+    user_interactions:
+      - Requires an authenticated session
+    api_calls:
+      - method: GET
+        endpoint: /api/spending/summary
+    auth_required: true
+  - name: BTC Research
+    description: "Authenticated BTC market context, trend, volatility, latest signal, confidence, freshness, and signal history."
+    files:
+      - src/app/(terminal)/btc-research/page.tsx
+    entry_route: /btc-research
+    user_interactions:
+      - Requires an authenticated session
+    api_calls:
+      - method: GET
+        endpoint: /api/research/btc
+    auth_required: true
+  - name: Smart Money Watch
+    description: "Authenticated public-wallet watchlist and smart-money event inspection with late-entry risk alerts."
+    files:
+      - src/app/(terminal)/smart-money/page.tsx
+    entry_route: /smart-money
+    user_interactions:
+      - Requires an authenticated session
+    api_calls:
+      - method: GET
+        endpoint: /api/smart-money/events
+    auth_required: true
+  - name: Ask Portfolio AI Assistant
+    description: "Authenticated AI assistant answering portfolio, spending, BTC signal, smart-money, and data-quality questions using allowlisted server-side tools."
+    files:
+      - src/app/(terminal)/ask-portfolio/page.tsx
+    entry_route: /ask-portfolio
+    user_interactions:
+      - Requires an authenticated session
+    api_calls:
+      - method: GET
+        endpoint: /api/conversations
+    auth_required: true
+known_limitations:
+  - issue: "Most application features require authentication; without a registered test account only registration, sign-in, and the /api/health endpoint can be exercised end-to-end."
+    location: src/app/(terminal)/layout.tsx
+    impact: "Authenticated flows (overview, portfolio, spending, BTC research, smart money, AI assistant, settings) cannot be tested without valid credentials."
+  - issue: "The root path / performs a server-side redirect and renders no visible public landing content."
+    location: src/app/page.tsx
+    impact: "There is no public marketing or landing page to test for static content."

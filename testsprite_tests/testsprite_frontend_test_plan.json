@@ -1,0 +1,1281 @@
+[
+  {
+    "id": "TC001",
+    "title": "View the authenticated overview dashboard",
+    "description": "This verifies that a signed-in user can access the overview dashboard and see the core workspace summary content.",
+    "category": "Overview Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sign-in"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /overview"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify portfolio summary data is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify spending, BTC signal, smart-money activity, and data-quality summary content is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Sign in and reach the authenticated terminal",
+    "description": "This verifies that a returning user can sign in with valid credentials and land in the authenticated app state.",
+    "category": "User Sign-in",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sign-in"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the overview dashboard is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the authenticated terminal is available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Register a new workspace and continue to onboarding",
+    "description": "This verifies that a guest can create a new account with valid credentials and is routed into the onboarding flow afterward.",
+    "category": "User Registration",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /register"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the full name field with a valid name"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with a valid email address"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with a valid password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the onboarding page is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the authenticated setup flow is available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Record a portfolio transaction and see balances update",
+    "description": "A user can add a crypto transaction in the portfolio ledger and see the portfolio metrics update afterward.",
+    "category": "Portfolio Ledger",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the portfolio ledger section"
+      },
+      {
+        "type": "action",
+        "description": "Open the transaction entry form"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the asset field with a crypto asset"
+      },
+      {
+        "type": "action",
+        "description": "Select a buy transaction type"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the quantity field with a valid amount"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the execution price field with a valid price"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the fee field with a valid fee amount"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the venue field with a venue name"
+      },
+      {
+        "type": "action",
+        "description": "Fill in a valid date into the date field"
+      },
+      {
+        "type": "action",
+        "description": "Save the transaction"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new transaction appears in the ledger"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify portfolio metrics are updated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Stay routed to the terminal after sign in",
+    "description": "A returning user can sign in and land in the authenticated terminal with access to the main overview area.",
+    "category": "Authentication gates and session routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the authenticated overview is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains in the authenticated terminal"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Ask a grounded portfolio question and see sourced guidance",
+    "description": "A user can ask the portfolio assistant a question and receive an answer grounded in their own data with source indicators and caveats.",
+    "category": "Ask Portfolio AI Assistant",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the ask portfolio assistant section"
+      },
+      {
+        "type": "action",
+        "description": "Type a question about recent portfolio performance into the assistant input"
+      },
+      {
+        "type": "action",
+        "description": "Submit the question"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an assistant answer is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify source badges or caveats are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Register and continue to onboarding",
+    "description": "A new user can create an account and is routed into onboarding to complete first-time setup.",
+    "category": "Authentication gates and session routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /register"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with a new valid email address"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with a valid password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the onboarding screen is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify first-time setup content is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Block unauthenticated access to the onboarding flow",
+    "description": "This verifies that a guest who tries to open onboarding is redirected back to sign-in instead of seeing private setup content.",
+    "category": "Overview Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /onboarding"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the sign-in page is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Enter the app from the root route as a signed-in user",
+    "description": "An authenticated user visiting the root route is routed into the terminal instead of a public landing page.",
+    "category": "Authentication gates and session routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the authenticated overview is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no public landing content is shown"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Review the latest BTC research signal and evidence",
+    "description": "A user can open BTC research and see the latest signal with its supporting evidence and freshness indicators.",
+    "category": "BTC Research",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the BTC research section"
+      },
+      {
+        "type": "action",
+        "description": "Review the latest signal summary"
+      },
+      {
+        "type": "action",
+        "description": "Open the signal evidence details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the latest BTC signal is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify supporting evidence and freshness information are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Edit an existing portfolio transaction and see recalculated metrics",
+    "description": "A user can update an existing crypto transaction and the portfolio summary recalculates afterward.",
+    "category": "Portfolio Ledger",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the portfolio ledger section"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing transaction for editing"
+      },
+      {
+        "type": "action",
+        "description": "Update the transaction details"
+      },
+      {
+        "type": "action",
+        "description": "Save the changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the edited transaction is reflected in the ledger"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify portfolio metrics are recalculated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Delete a portfolio transaction and see it removed from the ledger",
+    "description": "A user can delete an existing crypto transaction and the ledger and summary no longer include it.",
+    "category": "Portfolio Ledger",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the portfolio ledger section"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing transaction actions menu"
+      },
+      {
+        "type": "action",
+        "description": "Delete the transaction"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the deletion"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the transaction is removed from the ledger"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify portfolio metrics are updated after deletion"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "View latest smart-money watch events",
+    "description": "A signed-in user can open the smart-money view and see watched wallets with recent token-flow events.",
+    "category": "Smart Money Watch",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the smart-money section link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify watched wallets and recent events are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify wallet classifications are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Import a Money Lover CSV and review mapped spending data",
+    "description": "A user can upload a Money Lover CSV, fix mappings if needed, confirm the import, and see updated spending trends.",
+    "category": "Spending Analysis",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the spending analysis section"
+      },
+      {
+        "type": "action",
+        "description": "Upload a Money Lover CSV export"
+      },
+      {
+        "type": "action",
+        "description": "Review the detected mappings"
+      },
+      {
+        "type": "action",
+        "description": "Correct any missing required mappings"
+      },
+      {
+        "type": "action",
+        "description": "Continue to the import preview"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify imported spending entries are reflected in the analysis"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify spending trends are updated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Inspect detailed evidence for a smart-money event",
+    "description": "A signed-in user can open a smart-money event and review the token, market, and evidence details that support it.",
+    "category": "Smart Money Watch",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the smart-money section link"
+      },
+      {
+        "type": "action",
+        "description": "Open a watched wallet event"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify event evidence details are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify transaction and market context are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Import a supported portfolio CSV and confirm transactions are added",
+    "description": "A user can import supported portfolio transactions from CSV and see the imported rows appear after confirmation.",
+    "category": "Portfolio Ledger",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the portfolio ledger section"
+      },
+      {
+        "type": "action",
+        "description": "Open the portfolio import flow"
+      },
+      {
+        "type": "action",
+        "description": "Select a supported transaction CSV file"
+      },
+      {
+        "type": "action",
+        "description": "Review the import preview"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify imported transactions appear in the ledger"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify portfolio metrics reflect the import"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC017",
+    "title": "Ask a grounded portfolio question with source-backed answer",
+    "description": "A signed-in user can ask the assistant about their own data and receive a response that includes source support and caveats.",
+    "category": "Ask Portfolio AI Assistant",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the ask-portfolio section link"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the question field with a grounded question about portfolio or spending data"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a grounded answer is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify source badges and caveats are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Review BTC signal history",
+    "description": "A user can open BTC research signal history and review previous signals with their evidence.",
+    "category": "BTC Research",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the BTC research section"
+      },
+      {
+        "type": "action",
+        "description": "Open the signal history view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify prior BTC signals are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify supporting evidence is available for historical signals"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC019",
+    "title": "Review smart-money events and drill into event details",
+    "description": "A user can browse smart-money wallet events and inspect the evidence behind an individual event.",
+    "category": "Smart Money Watch",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the smart-money watch section"
+      },
+      {
+        "type": "action",
+        "description": "Open an event detail view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify recent smart-money events are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify event evidence details are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC020",
+    "title": "Review late-entry risk guidance for a smart-money event",
+    "description": "A signed-in user can see the late-entry warning state and read the explanation before acting on a smart-money event.",
+    "category": "Smart Money Watch",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the smart-money section link"
+      },
+      {
+        "type": "action",
+        "description": "Open a watched wallet event with a risk warning"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a late-entry risk warning is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the warning explanation is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC021",
+    "title": "Fix missing CSV mappings and continue the spending import",
+    "description": "A user can resolve missing required mappings during Money Lover CSV import and proceed successfully.",
+    "category": "Spending Analysis",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the spending analysis section"
+      },
+      {
+        "type": "action",
+        "description": "Upload a CSV with missing required mappings"
+      },
+      {
+        "type": "action",
+        "description": "Review the mapping step"
+      },
+      {
+        "type": "action",
+        "description": "Select the missing required mappings"
+      },
+      {
+        "type": "action",
+        "description": "Continue the import flow"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the import preview is shown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mapping issue is resolved"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC022",
+    "title": "Update display preferences in settings",
+    "description": "A signed-in user can change display preferences and save them from the settings page.",
+    "category": "User Settings",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the settings section link"
+      },
+      {
+        "type": "action",
+        "description": "Select a different display currency"
+      },
+      {
+        "type": "action",
+        "description": "Select a different timezone"
+      },
+      {
+        "type": "action",
+        "description": "Save the settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated preferences are reflected on the settings page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a saved confirmation is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC023",
+    "title": "Detect missing or stale data in assistant response",
+    "description": "A signed-in user can ask about data quality and receive a response that identifies missing or stale inputs.",
+    "category": "Ask Portfolio AI Assistant",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the ask-portfolio section link"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the question field with a question about missing or stale data"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a data-quality response is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify missing data or freshness guidance is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC024",
+    "title": "Export portfolio data",
+    "description": "A user can export their portfolio data from the ledger.",
+    "category": "Portfolio Ledger",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the portfolio ledger section"
+      },
+      {
+        "type": "action",
+        "description": "Start the portfolio export"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the exported file download is initiated"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC025",
+    "title": "See a warning for late-entry smart-money events",
+    "description": "A user can identify smart-money events that are flagged as late entry opportunities or cautions.",
+    "category": "Smart Money Watch",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the smart-money watch section"
+      },
+      {
+        "type": "action",
+        "description": "Review the event list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify late-entry warnings are displayed when applicable"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the flagged events remain visible in the list"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC026",
+    "title": "Review a watch signal when BTC data is stale or incomplete",
+    "description": "A user can see a watch signal and the associated caution indicators when BTC research data is not fresh enough for a stronger recommendation.",
+    "category": "BTC Research",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the BTC research section"
+      },
+      {
+        "type": "action",
+        "description": "Review the current signal state"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a watch-style BTC signal is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify freshness or data quality cautions are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC027",
+    "title": "Delete an assistant conversation",
+    "description": "A signed-in user can remove an existing assistant conversation and no longer see it in chat history.",
+    "category": "Ask Portfolio AI Assistant",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the ask-portfolio section link"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing conversation"
+      },
+      {
+        "type": "action",
+        "description": "Delete the conversation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the conversation is removed from chat history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the assistant view remains usable after deletion"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC028",
+    "title": "Show validation errors for invalid registration input",
+    "description": "This verifies that invalid registration details are rejected and the user sees field-level validation feedback.",
+    "category": "User Registration",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /register"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with an invalid email address"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with a short password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation errors are visible for the registration form"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC029",
+    "title": "Delete a conversation from the portfolio assistant history",
+    "description": "A user can remove a prior assistant conversation from their history.",
+    "category": "Ask Portfolio AI Assistant",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "action",
+        "description": "Click the ask portfolio assistant section"
+      },
+      {
+        "type": "action",
+        "description": "Open a previous conversation"
+      },
+      {
+        "type": "action",
+        "description": "Delete the conversation from history"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the deletion"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the conversation is removed from history"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC030",
+    "title": "Show an error for invalid sign-in credentials",
+    "description": "This verifies that a user entering incorrect credentials sees a sign-in error and does not enter the app.",
+    "category": "User Sign-in",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sign-in"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with a valid email address"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with an invalid password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-in form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an authentication error is visible"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC031",
+    "title": "Switch from registration to sign-in",
+    "description": "This verifies that a guest on the registration page can move to the sign-in page without starting registration.",
+    "category": "User Registration",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /register"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to sign in"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the sign-in page is displayed"
+      }
+    ],
+    "priority": "Low"
+  }
+]

@@ -92,6 +92,10 @@ export type SpendingDirection = "INCOME" | "EXPENSE";
 export interface SpendingTransaction {
   id: string;
   occurredOn: string;
+  reportMonth?: string;
+  entryType?: "STANDARD" | "CARRYOVER";
+  deleted?: boolean;
+  virtual?: boolean;
   amount: DecimalString;
   currency: SupportedCurrency;
   direction: SpendingDirection;
@@ -106,6 +110,8 @@ export interface SpendingSummary {
   incomeUsd: DecimalString;
   expensesUsd: DecimalString;
   savingsUsd: DecimalString;
+  carriedSavingsUsd: DecimalString;
+  endingSavingsUsd: DecimalString;
   savingsRatePct: DecimalString;
   previousIncomeUsd: DecimalString;
   previousExpensesUsd: DecimalString;

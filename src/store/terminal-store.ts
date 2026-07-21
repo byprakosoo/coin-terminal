@@ -62,6 +62,10 @@ interface TerminalState extends WorkspacePayload {
   addSpendingTransaction: (input: Omit<SpendingTransaction, "id">) => Promise<void>;
   updateSpendingTransaction: (id: string, input: Omit<SpendingTransaction, "id">) => Promise<void>;
   deleteSpendingTransaction: (id: string) => Promise<void>;
+  deleteSpendingTransactions: (ids: string[]) => Promise<number>;
+  deleteSpendingTransactionsForMonth: (month: string) => Promise<number>;
+  upsertSpendingCarryover: (month: string, input: { amount: string; direction: "INCOME" | "EXPENSE"; note?: string }) => Promise<void>;
+  deleteSpendingCarryover: (month: string) => Promise<void>;
   addWallet: (input: Omit<WatchlistWallet, "id">) => Promise<void>;
   toggleWallet: (id: string) => Promise<void>;
   setWalletSelfAttested: (id: string, selfAttested: boolean) => Promise<void>;
@@ -186,6 +190,61 @@ export const useTerminalStore = create<TerminalState>()(
       deleteSpendingTransaction: async (id) => {
         await apiRequest<void>(`/api/spending/transactions/${id}`, { method: "DELETE" });
         set((state) => ({ spending: state.spending.filter((item) => item.id !== id) }));
+      },
+      deleteSpendingTransactions: async (ids) => {
+        const result = await apiRequest<{ deleted: number }>("/api/spending/transactions", {
+          method: "DELETE",
+          body: jsonBody({ ids }),
+        });
+        const selected = new Set(ids);
+        set((state) => ({ spending: state.spending.filter((item) => !selected.has(item.id)) }));
+        return result.deleted;
+      },
+      deleteSpendingTransactionsForMonth: async (month) => {
+        const result = await apiRequest<{ deleted: number }>("/api/spending/transactions", {
+          method: "DELETE",
+          body: jsonBody({ month }),
+        });
+        set((state) => ({
+          spending: state.spending.filter((item) => (item.reportMonth ?? item.occurredOn.slice(0, 7)) !== month),
+        }));
+        return result.deleted;
+      },
+      upsertSpendingCarryover: async (month, input) => {
+        const carryover = await apiRequest<SpendingTransaction>(`/api/spending/carryovers/${month}`, {
+          method: "PATCH",
+          body: jsonBody(input),
+        });
+        set((state) => ({
+          spending: [
+            carryover,
+            ...state.spending.filter((item) => item.entryType !== "CARRYOVER" || item.reportMonth !== month),
+          ],
+        }));
+      },
+      deleteSpendingCarryover: async (month) => {
+        await apiRequest<void>(`/api/spending/carryovers/${month}`, { method: "DELETE" });
+        set((state) => {
+          const existing = state.spending.find((item) => item.entryType === "CARRYOVER" && item.reportMonth === month);
+          const tombstone: SpendingTransaction = {
+            id: existing?.id ?? `carryover-deleted-${month}`,
+            occurredOn: `${month}-01`,
+            reportMonth: month,
+            entryType: "CARRYOVER",
+            deleted: true,
+            amount: "0",
+            currency: "USD",
+            direction: "INCOME",
+            category: "Net Savings Carryover",
+            account: "Carryover",
+          };
+          return {
+            spending: [
+              tombstone,
+              ...state.spending.filter((item) => item.entryType !== "CARRYOVER" || item.reportMonth !== month),
+            ],
+          };
+        });
       },
       addWallet: async (input) => {
         const wallet = await apiRequest<WatchlistWallet>("/api/wallets", {

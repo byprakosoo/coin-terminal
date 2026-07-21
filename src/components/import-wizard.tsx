@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -50,6 +51,7 @@ interface PreviewResponse {
   accepted: number;
   duplicate: number;
   invalid: number;
+  acceptedMonths: Array<{ month: string; accepted: number }>;
   rows: Array<{
     rowNumber: number;
     status: PreviewRow["status"];
@@ -62,7 +64,7 @@ interface PreviewResponse {
 
 export { normalizePortfolio, normalizeSpending };
 
-export function ImportWizard({ open, onOpenChange, kind }: { open: boolean; onOpenChange: (value: boolean) => void; kind: ImportKind }) {
+export function ImportWizard({ open, onOpenChange, kind, selectedMonth, onSelectedMonthChange }: { open: boolean; onOpenChange: (value: boolean) => void; kind: ImportKind; selectedMonth?: string; onSelectedMonthChange?: (month: string) => void }) {
   const [step, setStep] = useState(1);
   const [selectedFile, setSelectedFile] = useState<File>();
   const [fileName, setFileName] = useState("");
@@ -72,13 +74,14 @@ export function ImportWizard({ open, onOpenChange, kind }: { open: boolean; onOp
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [batchId, setBatchId] = useState("");
   const [counts, setCounts] = useState({ accepted: 0, duplicate: 0, invalid: 0 });
+  const [acceptedMonths, setAcceptedMonths] = useState<Array<{ month: string; accepted: number }>>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const refreshWorkspace = useTerminalStore((state) => state.refreshWorkspace);
   const fields = kind === "spending" ? spendingFields : portfolioFields;
   const requiredMapped = fields.filter((field) => field.required).every((field) => mapping[field.key]);
-  const reset = () => { setStep(1); setSelectedFile(undefined); setFileName(""); setHeaders([]); setRows([]); setMapping({}); setPreview([]); setBatchId(""); setCounts({ accepted: 0, duplicate: 0, invalid: 0 }); setError(""); setSubmitting(false); if (inputRef.current) inputRef.current.value = ""; };
+  const reset = () => { setStep(1); setSelectedFile(undefined); setFileName(""); setHeaders([]); setRows([]); setMapping({}); setPreview([]); setBatchId(""); setCounts({ accepted: 0, duplicate: 0, invalid: 0 }); setAcceptedMonths([]); setError(""); setSubmitting(false); if (inputRef.current) inputRef.current.value = ""; };
 
   const handleFile = async (file?: File) => {
     setError("");
@@ -104,10 +107,12 @@ export function ImportWizard({ open, onOpenChange, kind }: { open: boolean; onOp
     form.set("file", selectedFile);
     form.set("kind", kind);
     form.set("mapping", JSON.stringify(mapping));
+    if (kind === "spending" && selectedMonth) form.set("reportMonth", selectedMonth);
     try {
       const result = await apiRequest<PreviewResponse>("/api/imports/preview", { method: "POST", body: form });
       setBatchId(result.batchId);
       setCounts({ accepted: result.accepted, duplicate: result.duplicate, invalid: result.invalid });
+      setAcceptedMonths(result.acceptedMonths);
       setPreview(result.rows.map((row) => ({ index: row.rowNumber, status: row.status, issues: row.issues, display: row.display, fingerprint: row.fingerprint })));
       setStep(3);
     } catch (previewError) {
@@ -123,7 +128,7 @@ export function ImportWizard({ open, onOpenChange, kind }: { open: boolean; onOp
     try {
       await apiRequest(`/api/imports/${batchId}/confirm`, { method: "POST" });
       await refreshWorkspace();
-      toast.success(`${counts.accepted} ${kind === "spending" ? "spending" : "portfolio"} rows imported`, { description: `${counts.duplicate} duplicates and ${counts.invalid} invalid rows skipped.` });
+      toast.success(`${counts.accepted} ${kind === "spending" ? "spending" : "portfolio"} rows imported`, { description: kind === "spending" ? `Assigned to ${selectedMonth ? formatMonth(selectedMonth) : "the selected Spending report"}. Transaction dates stay unchanged. ${counts.duplicate} duplicates and ${counts.invalid} invalid rows skipped.` : `${counts.duplicate} duplicates and ${counts.invalid} invalid rows skipped.` });
       onOpenChange(false); reset();
     } catch (confirmError) {
       setError(confirmError instanceof Error ? confirmError.message : "The import could not be confirmed.");
@@ -136,12 +141,20 @@ export function ImportWizard({ open, onOpenChange, kind }: { open: boolean; onOp
       <DialogContent className="max-w-4xl">
         <DialogHeader><DialogTitle>{kind === "spending" ? "Import Money Lover CSV" : "Import portfolio CSV"}</DialogTitle><DialogDescription>Upload, map, validate, and explicitly confirm rows. No ledger rows are saved before the final step.</DialogDescription></DialogHeader>
         <div className="flex gap-1.5">{[1, 2, 3].map((value) => <div key={value} className={`h-1 flex-1 rounded-full ${value <= step ? "bg-primary" : "bg-secondary"}`} />)}</div>
-        {step === 1 && <div className="py-3"><button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-64 w-full flex-col items-center justify-center rounded-lg border border-dashed border-input bg-background/35 p-8 text-center transition hover:border-primary/50 hover:bg-primary/[0.025]"><span className="flex size-12 items-center justify-center rounded-xl border bg-secondary text-primary"><FileUp className="size-5" /></span><p className="mt-4 text-sm font-medium">Choose a CSV file</p><p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">Maximum 10 MB. The first row must contain column names. Up to 5,000 rows are validated server-side.</p></button><input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0])} />{error && <p className="mt-3 flex items-center gap-2 text-xs text-destructive"><AlertCircle className="size-3.5" />{error}</p>}<div className="mt-4 rounded-md border bg-muted/35 p-3 text-xs text-muted-foreground"><strong className="text-foreground">Expected required fields:</strong> {fields.filter((field) => field.required).map((field) => field.label).join(", ")}.</div></div>}
+        {step === 1 && <div className="py-3">{kind === "spending" && selectedMonth && onSelectedMonthChange && <div className="mb-4 rounded-lg border bg-muted/25 p-3"><Label htmlFor="import-report-month">Report month</Label><div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:items-center"><Input id="import-report-month" type="month" value={selectedMonth} onChange={(event) => onSelectedMonthChange(event.target.value)} className="sm:w-48" /><p className="text-xs text-muted-foreground">All imported rows appear in this Spending report, even when their CSV dates are in another month.</p></div></div>}<button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-64 w-full flex-col items-center justify-center rounded-lg border border-dashed border-input bg-background/35 p-8 text-center transition hover:border-primary/50 hover:bg-primary/[0.025]"><span className="flex size-12 items-center justify-center rounded-xl border bg-secondary text-primary"><FileUp className="size-5" /></span><p className="mt-4 text-sm font-medium">Choose a CSV file</p><p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">Maximum 10 MB. The first row must contain column names. Up to 5,000 rows are validated server-side.</p></button><input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0])} />{error && <p className="mt-3 flex items-center gap-2 text-xs text-destructive"><AlertCircle className="size-3.5" />{error}</p>}<div className="mt-4 rounded-md border bg-muted/35 p-3 text-xs text-muted-foreground"><strong className="text-foreground">Expected required fields:</strong> {fields.filter((field) => field.required).map((field) => field.label).join(", ")}.</div></div>}
         {step === 2 && <div className="py-2"><div className="mb-5 flex items-center gap-3 rounded-lg border bg-background/45 p-3"><FileSpreadsheet className="size-5 text-success" /><div><p className="text-sm font-medium">{fileName}</p><p className="text-xs text-muted-foreground">{rows.length.toLocaleString()} rows · {headers.length} columns detected</p></div><Button variant="ghost" size="icon-sm" className="ml-auto" onClick={reset} aria-label="Choose a different file"><RotateCcw /></Button></div><div className="grid gap-4 sm:grid-cols-2">{fields.map((field) => <div key={field.key} className="space-y-2"><Label>{field.label} {field.required && <span className="text-primary">*</span>}</Label><Select value={mapping[field.key] || "__none"} onValueChange={(value) => setMapping((current) => ({ ...current, [field.key]: value === "__none" ? "" : value }))}><SelectTrigger><SelectValue placeholder="Select source column" /></SelectTrigger><SelectContent><SelectItem value="__none">Not mapped</SelectItem>{headers.map((header) => <SelectItem key={header} value={header}>{header}</SelectItem>)}</SelectContent></Select></div>)}</div></div>}
-        {step === 3 && <div className="min-h-0 py-2"><div className="mb-4 grid grid-cols-3 gap-3">{[{ label: "Accepted", value: counts.accepted, icon: CheckCircle2, style: "text-success" }, { label: "Duplicate", value: counts.duplicate, icon: AlertCircle, style: "text-warning" }, { label: "Invalid", value: counts.invalid, icon: XCircle, style: "text-risk" }].map(({ label, value, icon: Icon, style }) => <div key={label} className="rounded-lg border bg-background/45 p-3"><div className="flex items-center gap-2"><Icon className={`size-3.5 ${style}`} /><span className="text-[10px] tracking-wider text-muted-foreground uppercase">{label}</span></div><p className="numeric mt-2 text-xl font-semibold">{value}</p></div>)}</div><div className="max-h-[42vh] overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Status</TableHead><TableHead>{kind === "spending" ? "Date / direction" : "Asset / type"}</TableHead><TableHead>Value</TableHead><TableHead>Issue</TableHead></TableRow></TableHeader><TableBody>{preview.slice(0, 200).map((row) => <TableRow key={row.index}><TableCell className="numeric text-xs text-muted-foreground">{row.index}</TableCell><TableCell><Badge variant={row.status === "ACCEPTED" ? "success" : row.status === "DUPLICATE" ? "warning" : "risk"}>{row.status}</Badge></TableCell><TableCell className="text-xs">{row.display[0]}</TableCell><TableCell className="numeric text-xs">{row.display[1]}</TableCell><TableCell className="max-w-xs text-xs text-muted-foreground">{row.issues.join("; ") || (row.status === "DUPLICATE" ? "Matching fingerprint" : "Ready")}</TableCell></TableRow>)}</TableBody></Table></div>{preview.length > 200 && <p className="mt-2 text-xs text-muted-foreground">Showing the first 200 preview rows.</p>}</div>}
+        {step === 3 && <div className="min-h-0 py-2"><div className="mb-4 grid grid-cols-3 gap-3">{[{ label: "Accepted", value: counts.accepted, icon: CheckCircle2, style: "text-success" }, { label: "Duplicate", value: counts.duplicate, icon: AlertCircle, style: "text-warning" }, { label: "Invalid", value: counts.invalid, icon: XCircle, style: "text-risk" }].map(({ label, value, icon: Icon, style }) => <div key={label} className="rounded-lg border bg-background/45 p-3"><div className="flex items-center gap-2"><Icon className={`size-3.5 ${style}`} /><span className="text-[10px] tracking-wider text-muted-foreground uppercase">{label}</span></div><p className="numeric mt-2 text-xl font-semibold">{value}</p></div>)}</div>{kind === "spending" && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/[0.04] p-3 text-xs"><p className="font-medium">Accepted rows will appear in {selectedMonth ? formatMonth(selectedMonth) : "the selected Spending report"}.</p><p className="mt-1 text-muted-foreground">CSV transaction dates remain unchanged. Accepted source dates: {formatAcceptedMonths(acceptedMonths)}.</p></div>}<div className="max-h-[42vh] overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Status</TableHead><TableHead>{kind === "spending" ? "Date / direction" : "Asset / type"}</TableHead><TableHead>Value</TableHead><TableHead>Issue</TableHead></TableRow></TableHeader><TableBody>{preview.slice(0, 200).map((row) => <TableRow key={row.index}><TableCell className="numeric text-xs text-muted-foreground">{row.index}</TableCell><TableCell><Badge variant={row.status === "ACCEPTED" ? "success" : row.status === "DUPLICATE" ? "warning" : "risk"}>{row.status}</Badge></TableCell><TableCell className="text-xs">{row.display[0]}</TableCell><TableCell className="numeric text-xs">{row.display[1]}</TableCell><TableCell className="max-w-xs text-xs text-muted-foreground">{row.issues.join("; ") || (row.status === "DUPLICATE" ? "Matching fingerprint" : "Ready")}</TableCell></TableRow>)}</TableBody></Table></div>{preview.length > 200 && <p className="mt-2 text-xs text-muted-foreground">Showing the first 200 preview rows.</p>}</div>}
         {error && step > 1 && <p className="flex items-center gap-2 text-xs text-destructive"><AlertCircle className="size-3.5" />{error}</p>}
         <DialogFooter><Button variant="ghost" onClick={step === 1 ? () => onOpenChange(false) : () => setStep((value) => value - 1)} disabled={submitting}>{step > 1 && <ArrowLeft />}{step === 1 ? "Cancel" : "Back"}</Button>{step === 2 && <Button onClick={() => void createPreview()} disabled={!requiredMapped || submitting}>{submitting ? "Validating…" : "Validate rows"}<ArrowRight /></Button>}{step === 3 && <Button onClick={() => void confirm()} disabled={counts.accepted === 0 || submitting}>{submitting ? "Importing…" : `Confirm ${counts.accepted} rows`}<CheckCircle2 /></Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function formatMonth(month: string) {
+  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function formatAcceptedMonths(months: Array<{ month: string; accepted: number }>) {
+  return months.length ? months.map(({ month, accepted }) => `${accepted} in ${formatMonth(month)}`).join(", ") : "no accepted rows";
 }

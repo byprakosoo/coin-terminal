@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { walletPatchSchema } from "@/server/validators";
+import { spendingTransactionSchema, walletPatchSchema } from "@/server/validators";
+
+describe("spendingTransactionSchema", () => {
+  it("accepts income and defaults blank category and account fields", () => {
+    const result = spendingTransactionSchema.safeParse({
+      occurredOn: "2026-07-21",
+      amount: "1000000",
+      currency: "IDR",
+      direction: "INCOME",
+      category: " ",
+      account: "",
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.category).toBe("Uncategorized");
+    expect(result.data.account).toBe("Manual");
+  });
+});
 
 describe("walletPatchSchema", () => {
   it("accepts an explicit self-attestation", () => {

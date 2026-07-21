@@ -1,6 +1,6 @@
 import "server-only";
 import Decimal from "decimal.js";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { portfolioTransactions, spendingTransactions } from "@/db/schema";
 import { ApiError } from "@/server/api";
@@ -121,14 +121,14 @@ export async function updateSpendingTransaction(
   input: SpendingInput,
 ) {
   const [existing] = await db
-    .select({ id: spendingTransactions.id })
+    .select({ id: spendingTransactions.id, reportMonth: spendingTransactions.reportMonth })
     .from(spendingTransactions)
     .where(
       and(eq(spendingTransactions.id, transactionId), eq(spendingTransactions.userId, userId)),
     )
     .limit(1);
   if (!existing) throw new ApiError(404, "Spending transaction not found.", "NOT_FOUND");
-  const values = spendingValues(userId, transactionId, input);
+  const values = spendingValues(userId, transactionId, input, existing.reportMonth);
   await db
     .update(spendingTransactions)
     .set(values)
@@ -156,6 +156,31 @@ export async function deleteSpendingTransaction(userId: string, transactionId: s
   }
 }
 
+export async function deleteSpendingTransactions(userId: string, transactionIds: string[]) {
+  if (!transactionIds.length) return 0;
+  const result = await db
+    .delete(spendingTransactions)
+    .where(
+      and(
+        eq(spendingTransactions.userId, userId),
+        inArray(spendingTransactions.id, transactionIds),
+      ),
+    );
+  return affectedRows(result);
+}
+
+export async function deleteSpendingTransactionsForMonth(userId: string, month: string) {
+  const result = await db
+    .delete(spendingTransactions)
+    .where(
+      and(
+        eq(spendingTransactions.userId, userId),
+        eq(spendingTransactions.reportMonth, month),
+      ),
+    );
+  return affectedRows(result);
+}
+
 function portfolioValues(userId: string, transactionId: string, input: PortfolioInput) {
   const executedAt = input.executedAt.toISOString();
   return {
@@ -181,11 +206,17 @@ function portfolioValues(userId: string, transactionId: string, input: Portfolio
   };
 }
 
-function spendingValues(userId: string, transactionId: string, input: SpendingInput) {
+function spendingValues(
+  userId: string,
+  transactionId: string,
+  input: SpendingInput,
+  reportMonth = input.occurredOn.slice(0, 7),
+) {
   return {
     id: transactionId,
     userId,
     occurredOn: input.occurredOn,
+    reportMonth,
     amount: new Decimal(input.amount).abs().toString(),
     currency: input.currency,
     direction: input.direction,

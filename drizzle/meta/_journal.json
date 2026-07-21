@@ -29,6 +29,41 @@
       "when": 1783931223042,
       "tag": "0003_lame_ben_urich",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1784539590076,
+      "tag": "0004_bumpy_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1784543608454,
+      "tag": "0005_outgoing_husk",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1784635200000,
+      "tag": "0006_repeat_import_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1784638800000,
+      "tag": "0007_elite_garia",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1784642400000,
+      "tag": "0008_left_leo",
+      "breakpoints": true
     }
   ]
 }

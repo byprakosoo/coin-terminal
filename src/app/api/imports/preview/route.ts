@@ -13,6 +13,7 @@ export const POST = withUser(async (request: NextRequest, user) => {
   const file = form.get("file");
   const kind = form.get("kind");
   const mappingValue = form.get("mapping");
+  const reportMonth = form.get("reportMonth");
   if (!(file instanceof File) || (kind !== "spending" && kind !== "portfolio")) {
     throw new ApiError(422, "File and import kind are required.", "VALIDATION_ERROR");
   }
@@ -26,7 +27,7 @@ export const POST = withUser(async (request: NextRequest, user) => {
   if (!mapping.success) {
     throw new ApiError(422, "Mapping is invalid.", "VALIDATION_ERROR", mapping.error.flatten());
   }
-  return json(await previewImport({ userId: user.id, kind, file, mapping: mapping.data }), {
+  return json(await previewImport({ userId: user.id, kind, file, mapping: mapping.data, reportMonth: reportMonth ? String(reportMonth) : undefined }), {
     status: 201,
   });
 });

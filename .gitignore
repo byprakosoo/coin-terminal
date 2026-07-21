@@ -9,3 +9,5 @@ coverage/
 .env*
 !.env.example
 .vercel
+
+testsprite_tests/tmp/config.json

@@ -21,6 +21,12 @@ const decimal = (options: { positive?: boolean; nonnegative?: boolean } = {}) =>
 
 const isoDate = z.string().datetime({ offset: true }).transform((value) => new Date(value));
 
+const defaultedText = (defaultValue: string, maxLength: number) =>
+  z.preprocess(
+    (value) => typeof value === "string" && !value.trim() ? undefined : value,
+    z.string().trim().min(1).max(maxLength).default(defaultValue),
+  );
+
 export const profileUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(160).optional(),
@@ -81,8 +87,46 @@ export const spendingTransactionSchema = z.object({
   amount: decimal({ positive: true }),
   currency: z.enum(["USD", "IDR", "EUR"]),
   direction: z.enum(["INCOME", "EXPENSE"]),
-  category: z.string().trim().min(1).max(160).default("Uncategorized"),
-  account: z.string().trim().min(1).max(160).default("Manual"),
+  category: defaultedText("Uncategorized", 160),
+  account: defaultedText("Manual", 160),
+  note: z.string().trim().max(5_000).optional(),
+});
+
+export const spendingMonthSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must use YYYY-MM format."),
+});
+
+export const spendingTransactionIdsSchema = z.object({
+  ids: z
+    .array(z.string().uuid())
+    .min(1, "Select at least one transaction.")
+    .max(5_000, "A maximum of 5,000 transactions can be deleted at once.")
+    .refine((ids) => new Set(ids).size === ids.length, "Transaction IDs must be unique."),
+});
+
+export const spendingDeleteSchema = z.union([spendingMonthSchema, spendingTransactionIdsSchema]);
+
+export const spendingCarryoverSchema = z.object({
+  amount: decimal({ positive: true }),
+  direction: z.enum(["INCOME", "EXPENSE"]),
+  note: z.string().trim().max(5_000).optional(),
+});
+
+const recapDecimal = decimal({ nonnegative: true });
+
+/** Payload accepted by the Income History snapshot endpoints. */
+export const portfolioRecapSnapshotSchema = z.object({
+  asOfDate: z.iso.date(),
+  bankIdr: recapDecimal,
+  rdpuIdr: recapDecimal,
+  ihsgIdr: recapDecimal,
+  sp500Idr: recapDecimal,
+  btcIdr: recapDecimal,
+  ethIdr: recapDecimal,
+  altcoinIdr: recapDecimal,
+  goldIdr: recapDecimal,
+  idrPerUsd: recapDecimal.optional(),
+  source: z.enum(["MANUAL", "HYBRID_PREFILL", "XLSX_IMPORT"]).optional(),
   note: z.string().trim().max(5_000).optional(),
 });
 
