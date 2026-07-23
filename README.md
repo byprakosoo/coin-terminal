@@ -1,50 +1,177 @@
 # Coin Terminal
 
-Private personal-finance and Bitcoin research terminal built with Next.js 16, Drizzle ORM, TiDB/MySQL, and Better Auth.
+Coin Terminal is a private, self-hostable personal-finance and Bitcoin research
+workspace. It brings portfolio accounting, spending analysis, explainable market
+research, public-wallet monitoring, and a data-grounded assistant into one
+auditable application.
 
-## Backend capabilities
+The project is built for people who want to understand their financial data
+without handing an application exchange credentials, private keys, or authority
+to trade on their behalf.
 
-- Email/password authentication with database-backed sessions and rate limits.
-- User-isolated portfolio and spending ledgers using `DECIMAL` columns.
-- Server-side Money Lover/portfolio CSV preview, fingerprints, duplicate detection, and transactional confirmation.
-- Frozen, hash-verified BTC rules: a continuous research-only Coinbase/Binance consensus verdict with official CFTC institutional-positioning context, plus a separately gated defensive allocation model with historical acceptance, shadow signals, freshness halts, and execution reconciliation.
-- Public-wallet watchlists and transfer ingestion from mempool.space and Etherscan V2.
-- Smart-money/late-entry persistence, alerts, and evidence receipts.
-- Authenticated portfolio-assistant selectors with optional OpenAI Responses API synthesis, deterministic fallback, persisted source receipts, and generation-mode audit records.
-- Idempotent cron job runs for market and wallet synchronization.
+> Research only — not investment advice. Coin Terminal does not execute trades,
+> custody assets, or guarantee returns.
 
-The application does not execute trades, store exchange credentials, or accept private keys, seed phrases, or wallet signatures.
+## Why Coin Terminal exists
+
+Personal-finance apps, portfolio trackers, and crypto research dashboards usually
+solve separate parts of the same problem. Moving between them makes it difficult
+to trace a conclusion back to the transaction, price snapshot, market source, or
+calculation that produced it. Crypto products can also overstate what public
+wallet transfers reveal or present opaque model output as a recommendation.
+
+Coin Terminal fills that gap with an evidence-first design:
+
+- Personal records are isolated by authenticated account.
+- Portfolio and spending calculations use deterministic decimal arithmetic.
+- Imports are previewed, validated, deduplicated, and explicitly confirmed.
+- BTC research records its sources, timestamps, freshness, rule version, and
+  rejection reasons.
+- Conflicting, stale, or missing market data halts directional output instead of
+  fabricating confidence.
+- Public-wallet transfers remain transfers unless a separate source proves a
+  trade; wallet identity and intent are never inferred from movement alone.
+- The portfolio assistant starts with authenticated, allowlisted selectors and
+  falls back to a deterministic answer if model synthesis is unavailable or
+  violates the product's safety boundary.
+
+## What it includes
+
+- **Portfolio ledger:** multi-asset transactions, average-cost basis, fees,
+  realized and unrealized P&L, allocation, data-quality warnings, CSV import, and
+  export.
+- **Spending analysis:** Money Lover-compatible imports, income and expense
+  normalization, monthly comparisons, categories, savings, and carryovers.
+- **Portfolio recap:** saved net-worth snapshots and IDR/USD reporting.
+- **BTC research:** completed-candle consensus from Coinbase and Binance, bounded
+  CFTC and public-wallet context, evidence receipts, backtesting, and a separately
+  gated defensive strategy.
+- **Public-wallet research:** BTC and EVM watchlists, source-linked transfers,
+  conservative wallet qualification, and late-entry risk classification.
+- **Ask Portfolio:** natural-language questions answered from the same
+  deterministic calculations shown by the dashboard, with optional model
+  synthesis and persisted source receipts.
+- **Operations:** authenticated and idempotent scheduled jobs for market, wallet,
+  smart-money, and strategy updates.
+
+## Project reach and impact
+
+Coin Terminal is an early-stage project under active development, so it does not
+yet have package-registry downloads or known downstream dependents. Development
+on the current main branch began in July 2026. As of July 23, 2026, the repository
+contains 166 source files and 101 automated test cases across 19 test files,
+covering financial calculations, ledger validation, imports, wallet
+qualification, research signals, backtesting, strategy lifecycle, and assistant
+privacy and safety.
+
+Its impact today is the gap it addresses: there are few self-hostable tools that
+combine personal cash-flow and portfolio accounting with explainable Bitcoin
+research while treating uncertainty, provenance, privacy, and non-custodial
+safety as first-class product requirements. Coin Terminal provides both a usable
+personal terminal and a concrete reference for developers exploring auditable
+financial software.
+
+The intended users are individual investors, researchers, and self-hosters who
+currently rely on disconnected spreadsheets, finance exports, portfolio
+trackers, and market dashboards. The next stage of the project is to make setup
+easier, publish clearer contributor guidance, harden provider integrations, and
+grow a community around transparent, non-custodial financial research.
+
+## How the Claude Max subscription will support the project
+
+I will use the Claude Max subscription primarily through Claude Code as a
+development and maintenance tool for Coin Terminal. The additional capacity will
+support repository-wide work that is difficult to complete reliably in short,
+disconnected sessions:
+
+- reviewing architecture and cross-cutting changes across the UI, API, database,
+  scheduled jobs, and provider integrations;
+- debugging market-data edge cases and improving graceful handling of stale,
+  missing, rate-limited, or conflicting sources;
+- expanding tests for decimal financial calculations, authentication and
+  account isolation, migrations, import idempotency, and research-rule
+  regressions;
+- reviewing privacy and security boundaries around personal financial data and
+  model context;
+- refactoring complex research and strategy code without weakening its frozen
+  rules, evidence receipts, or safety gates; and
+- maintaining documentation, contributor guidance, issue triage, and release
+  notes as the project grows.
+
+As the solo maintainer, I will use the subscription to shorten the feedback loop
+between implementation, review, testing, and documentation. All generated
+changes will remain subject to human review and automated checks. Claude will not
+be given production financial records, make investment decisions, or become a
+runtime requirement for deterministic portfolio and spending calculations.
+
+## Technology
+
+- Next.js 16 and React 19
+- TypeScript and Tailwind CSS
+- Drizzle ORM with TiDB or MySQL 8
+- Better Auth
+- Vitest and Testing Library
+- Vercel or Docker/Coolify deployment
 
 ## Local setup
 
-1. Copy `.env.example` to `.env.local` and configure a MySQL-compatible database. TiDB Cloud uses port `4000` and normally requires `DATABASE_SSL=true`.
-2. Install dependencies:
+### Prerequisites
+
+- Node.js 20.9 or newer
+- A MySQL 8-compatible database
+
+### Installation
+
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-3. Apply the checked-in migrations:
+2. Copy the environment template:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+3. Configure the required database, authentication, application URL, and cron
+   values in `.env.local`. TiDB Cloud normally uses port `4000` with
+   `DATABASE_SSL=true`.
+
+4. Apply the checked-in migrations:
 
    ```bash
    npm run db:migrate
    ```
 
-4. Start the app:
+5. Start the development server:
 
    ```bash
    npm run dev
    ```
 
-Register at `/register`. The first authenticated bootstrap creates an empty private ledger, provider metadata, and the reviewed public-wallet watchlist; production does not insert demo financial records or demo signals.
+6. Open `http://localhost:3000/register` and create an account.
 
-For Coolify, configure the production variables from `.env.example`, apply `npm run db:migrate` from the source checkout or CI before deploying the image, deploy the included multi-stage `Dockerfile`, and use `/api/health` for the health check.
+The first authenticated bootstrap creates an empty private ledger and provider
+metadata. Production does not insert demo financial records or demo signals.
+
+## Configuration
+
+The required and optional variables are documented in `.env.example`.
+
+- A model credential is optional. Without one, Ask Portfolio returns its
+  authenticated deterministic answer.
+- Vercel deployments can use the project-scoped OIDC token with AI Gateway.
+- Direct OpenAI access is an optional secondary synthesis provider.
+- Etherscan credentials are only required for supported EVM wallet ingestion.
+- Free-form notes, record IDs, fingerprints, profile names, and email addresses
+  are excluded from model context.
 
 ## Scheduled jobs
 
-The checked-in `vercel.json` schedules wallet sync daily at `00:00` UTC, monthly defensive validation at `01:00` UTC on day one, and daily BTC research at `02:00` UTC. Each expression runs at most once per day so it is accepted on Vercel Hobby. The separate hours preserve the required order despite Hobby's hourly scheduling precision. Vercel calls each route with `GET` and automatically supplies `Authorization: Bearer $CRON_SECRET` when that environment variable is configured.
-
-For Coolify or manual operation, call these endpoints with a bearer secret and a unique idempotency key:
+`vercel.json` defines daily wallet and BTC research jobs and a monthly defensive
+strategy validation job. For Coolify or manual operation, call the internal job
+routes with the cron bearer secret and a unique idempotency key:
 
 ```bash
 curl -X POST http://localhost:3000/api/internal/jobs/market-sync \
@@ -68,25 +195,43 @@ curl -X POST http://localhost:3000/api/internal/jobs/btc-strategy-daily \
   -H "Idempotency-Key: btc-strategy-$(date -u +%F)"
 ```
 
-Run market sync after the UTC daily candle is complete. Run historical strategy validation before the daily strategy job and monthly thereafter. A historical pass starts a 180-ready-close shadow period; a failure is persisted with every rejection reason and never silently relaxed into an actionable recommendation. The daily job still publishes a separate research-only weighted verdict when the defensive model is rejected. Version `btc-consensus-research-v2.1.0` uses completed Coinbase BTC/USD and Binance BTC/USDT candles, halts on missing/disagreeing market sources, gives a bounded 10% weight to the CFTC's official weekly CME Bitcoin Asset Manager/Institutional futures positioning, and gives a separate 5% weight to the prior seven days of qualified monitored BTC wallet transfers. CFTC positions may be hedges and are delayed; wallet transfers are never relabeled as buys or sells. Missing or over-age CFTC data stays neutral and reduces evidence strength instead of fabricating institutional activity.
+Run market sync after the completed UTC daily candle is available. Historical
+strategy validation should run before the daily strategy job and monthly
+thereafter. Failed acceptance gates are persisted with their rejection reasons
+and are never silently relaxed into an actionable result.
 
-The wallet job is intentionally conservative: raw token/native transfers are stored as transfers, not inferred buys or sells. A user-added address remains unverified unless the user explicitly self-attests ownership or control; that statement is not cryptographic identity proof or evidence of trading skill. Self-attested BTC movements may contribute only to the bounded personal public-wallet context. Curated registry classifications cannot be overwritten through the user API. The smart-money evaluator processes only normalized `BUY`/`SELL` wallet events, enriches them with DEX Screener, applies late-entry precedence, and deduplicates alerts over a 24-hour cooldown.
-
-`Ask Portfolio` always runs a deterministic authenticated selector first. On Vercel it uses the project-scoped `VERCEL_OIDC_TOKEN` to call AI Gateway with `AI_GATEWAY_MODEL` (default `openai/gpt-5.6-luna`), so no long-lived model secret is required. The Vercel team must still satisfy AI Gateway customer verification/billing setup before requests are serviced. Local/non-Vercel environments can set `AI_GATEWAY_API_KEY`. Direct OpenAI via `OPENAI_API_KEY` is the secondary provider, and the deterministic answer is returned if neither model path succeeds. Model text that contains direct trade/allocation instructions or guaranteed-return language is discarded in favor of that grounded answer. The UI and persisted tool-call record disclose which path generated each response, including authentication, billing, rate-limit, empty-response, and safety-guard fallback categories. Free-form transaction/spending notes, record IDs, fingerprints, profile name, and email are excluded from model context.
-
-## Useful commands
+## Quality checks
 
 ```bash
 npm run typecheck
 npm run lint
 npm test
-npm run test:live-signal
 npm run build
+```
+
+Additional commands:
+
+```bash
+npm run test:live-signal
 npm run db:generate
 npm run db:migrate
 npm run db:studio
 ```
 
-Financial records remain decimal strings between MySQL, Drizzle, the APIs, and `decimal.js`; no persisted financial value is intentionally converted to a JavaScript float.
+The live-signal audit calls external data providers and is intentionally separate
+from the deterministic default test suite.
 
-Research only — not investment advice.
+## Safety boundaries
+
+Coin Terminal intentionally does not:
+
+- connect to exchanges or place orders;
+- store exchange credentials, private keys, seed phrases, or wallet signatures;
+- treat a public transfer as proof of a buy, sale, identity, or trading skill;
+- turn model agreement into a probability of profit;
+- allow a language model to calculate or overwrite persisted financial values; or
+- replace financial, tax, or legal advice.
+
+Persisted financial values remain decimal strings between MySQL, Drizzle, the
+API, and `decimal.js`; they are not intentionally converted to JavaScript
+floating-point values.
