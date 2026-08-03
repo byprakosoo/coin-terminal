@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError, apiRequest, jsonBody } from "@/lib/api-client";
 import type {
   AnnualRecapInput,
@@ -30,6 +30,8 @@ export interface UsePortfolioRecap {
   prefill: (asOf: string) => Promise<SnapshotPrefill>;
   saveSnapshot: (input: SnapshotInput, id?: string) => Promise<PortfolioSnapshot>;
   deleteSnapshot: (id: string) => Promise<void>;
+  saveGoldTransaction: (input: GoldTransactionInput) => Promise<GoldTransaction>;
+  saveGoldValuation: (input: GoldValuationInput) => Promise<GoldValuation>;
 }
 
 /** Loads the full recap read model (PRD §9.2) and exposes snapshot CRUD against the contract. */
@@ -37,16 +39,19 @@ export function usePortfolioRecap(): UsePortfolioRecap {
   const [data, setData] = useState<PortfolioRecapSummary>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const latestReload = useRef(0);
 
   const reload = useCallback(async () => {
+    const reloadId = ++latestReload.current;
     setLoading(true);
     setError(undefined);
     try {
-      setData(await apiRequest<PortfolioRecapSummary>("/api/portfolio-recap"));
+      const nextData = await apiRequest<PortfolioRecapSummary>("/api/portfolio-recap");
+      if (reloadId === latestReload.current) setData(nextData);
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      if (reloadId === latestReload.current) setError(errorMessage(requestError));
     } finally {
-      setLoading(false);
+      if (reloadId === latestReload.current) setLoading(false);
     }
   }, []);
 
@@ -87,7 +92,25 @@ export function usePortfolioRecap(): UsePortfolioRecap {
     [reload],
   );
 
-  return { data, loading, error, reload, prefill, saveSnapshot, deleteSnapshot };
+  const saveGoldTransactionAndReload = useCallback(
+    async (input: GoldTransactionInput) => {
+      const result = await saveGoldTransaction(input);
+      await reload();
+      return result;
+    },
+    [reload],
+  );
+
+  const saveGoldValuationAndReload = useCallback(
+    async (input: GoldValuationInput) => {
+      const result = await saveGoldValuation(input);
+      await reload();
+      return result;
+    },
+    [reload],
+  );
+
+  return { data, loading, error, reload, prefill, saveSnapshot, deleteSnapshot, saveGoldTransaction: saveGoldTransactionAndReload, saveGoldValuation: saveGoldValuationAndReload };
 }
 
 /** Gold transaction + valuation mutations (PRD §9.4). */

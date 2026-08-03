@@ -6,10 +6,12 @@ import { annualRecapSettings, goldTransactions, goldValuations, portfolioRecapSn
 import { ApiError } from "@/server/api";
 import { createId } from "@/server/ids";
 import type { AnnualRecapRow, GoldTransaction, GoldValuation, PortfolioRecapSummary, PortfolioSnapshot } from "@/features/portfolio-recap/types";
-import type { portfolioRecapSnapshotSchema } from "@/server/validators";
+import type { goldTransactionSchema, goldValuationSchema, portfolioRecapSnapshotSchema } from "@/server/validators";
 import type { z } from "zod";
 
 type SnapshotInput = z.infer<typeof portfolioRecapSnapshotSchema>;
+type GoldTransactionInput = z.infer<typeof goldTransactionSchema>;
+type GoldValuationInput = z.infer<typeof goldValuationSchema>;
 type SnapshotRow = typeof portfolioRecapSnapshots.$inferSelect;
 type GoldTransactionRow = typeof goldTransactions.$inferSelect;
 type GoldValuationRow = typeof goldValuations.$inferSelect;
@@ -80,6 +82,35 @@ export async function createPortfolioRecapSnapshot(userId: string, input: Snapsh
   return requireSnapshot(userId, id);
 }
 
+export async function createGoldTransaction(userId: string, input: GoldTransactionInput) {
+  const id = createId();
+  await db.insert(goldTransactions).values({
+    id,
+    userId,
+    transactionType: input.transactionType,
+    occurredOn: input.occurredOn,
+    goldType: input.goldType,
+    grams: new Decimal(input.grams).toString(),
+    unitPriceIdr: new Decimal(input.unitPriceIdr).toString(),
+    venue: input.venue || null,
+    note: input.note || null,
+  });
+  return requireGoldTransaction(userId, id);
+}
+
+export async function createGoldValuation(userId: string, input: GoldValuationInput) {
+  const id = createId();
+  await db.insert(goldValuations).values({
+    id,
+    userId,
+    asOfDate: input.asOfDate,
+    pricePerGramIdr: new Decimal(input.pricePerGramIdr).toString(),
+    source: input.source ?? "MANUAL",
+    note: input.note || null,
+  });
+  return requireGoldValuation(userId, id);
+}
+
 export async function updatePortfolioRecapSnapshot(userId: string, id: string, input: SnapshotInput) {
   const existing = await requireSnapshot(userId, id);
   await db
@@ -107,6 +138,26 @@ async function requireSnapshot(userId: string, id: string) {
     .limit(1);
   if (!row) throw new ApiError(404, "Snapshot not found.", "NOT_FOUND");
   return mapSnapshot(row);
+}
+
+async function requireGoldTransaction(userId: string, id: string) {
+  const [row] = await db
+    .select()
+    .from(goldTransactions)
+    .where(and(eq(goldTransactions.id, id), eq(goldTransactions.userId, userId)))
+    .limit(1);
+  if (!row) throw new ApiError(404, "Gold transaction not found.", "NOT_FOUND");
+  return mapGoldTransaction(row);
+}
+
+async function requireGoldValuation(userId: string, id: string) {
+  const [row] = await db
+    .select()
+    .from(goldValuations)
+    .where(and(eq(goldValuations.id, id), eq(goldValuations.userId, userId)))
+    .limit(1);
+  if (!row) throw new ApiError(404, "Gold valuation not found.", "NOT_FOUND");
+  return mapGoldValuation(row);
 }
 
 function snapshotValues(userId: string, id: string, input: SnapshotInput, sequence: number) {

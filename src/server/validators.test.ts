@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spendingTransactionSchema, walletPatchSchema } from "@/server/validators";
+import { goldTransactionSchema, spendingTransactionSchema, walletPatchSchema } from "@/server/validators";
 
 describe("spendingTransactionSchema", () => {
   it("accepts income and defaults blank category and account fields", () => {
@@ -46,5 +46,15 @@ describe("walletPatchSchema", () => {
       walletPatchSchema.safeParse({ classification: "PUBLICLY_ATTRIBUTED" }).success,
     ).toBe(false);
     expect(walletPatchSchema.safeParse({ qualityScore: "100" }).success).toBe(false);
+  });
+});
+
+describe("goldTransactionSchema", () => {
+  it("accepts a complete physical-gold purchase", () => {
+    expect(goldTransactionSchema.safeParse({ transactionType: "BUY", occurredOn: "2026-07-28", goldType: "Antam 24K", grams: "5", unitPriceIdr: "2450000" }).success).toBe(true);
+  });
+
+  it("rejects zero grams or price", () => {
+    expect(goldTransactionSchema.safeParse({ transactionType: "BUY", occurredOn: "2026-07-28", goldType: "Antam 24K", grams: "0", unitPriceIdr: "0" }).success).toBe(false);
   });
 });

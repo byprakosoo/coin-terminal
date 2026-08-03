@@ -130,6 +130,23 @@ export const portfolioRecapSnapshotSchema = z.object({
   note: z.string().trim().max(5_000).optional(),
 });
 
+export const goldTransactionSchema = z.object({
+  transactionType: z.enum(["BUY", "SELL"]),
+  occurredOn: z.iso.date(),
+  goldType: z.string().trim().min(1, "Enter the gold type.").max(120),
+  grams: decimal({ positive: true }),
+  unitPriceIdr: decimal({ positive: true }),
+  venue: z.string().trim().max(160).optional(),
+  note: z.string().trim().max(5_000).optional(),
+});
+
+export const goldValuationSchema = z.object({
+  asOfDate: z.iso.date(),
+  pricePerGramIdr: decimal({ positive: true }),
+  source: z.enum(["MANUAL", "XLSX_IMPORT"]).optional(),
+  note: z.string().trim().max(5_000).optional(),
+});
+
 export const walletSchema = z.object({
   chain: z.enum(["Bitcoin", "Ethereum", "Solana", "Base", "Arbitrum"]),
   address: z.string().trim().min(20).max(128),
