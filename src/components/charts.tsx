@@ -1,7 +1,7 @@
 "use client";
 
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatNativeMoney } from "@/lib/format";
 import type { DisplayCurrency, FxRate, Holding, MarketPoint } from "@/lib/types";
 import type { BtcBacktestPoint } from "@/lib/btc-backtest";
 
@@ -20,6 +20,22 @@ export function AllocationChart({ holdings, currency, rates }: { holdings: Holdi
             {data.map((item, index) => <Cell key={item.name} fill={colors[index % colors.length]} />)}
           </Pie>
           <Tooltip contentStyle={tooltipStyle} formatter={(value) => [formatMoney(Number(value), currency, rates), "Value"]} />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function NetWorthAllocationChart({ data, currency }: { data: Array<{ name: string; value: number }>; currency: DisplayCurrency }) {
+  if (!data.length) return <EmptyChart label="No net worth snapshot yet" />;
+  return (
+    <div className="h-48 w-full" aria-label="Latest net worth allocation chart">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={78} paddingAngle={3} stroke="transparent">
+            {data.map((item, index) => <Cell key={item.name} fill={colors[index % colors.length]} />)}
+          </Pie>
+          <Tooltip contentStyle={tooltipStyle} formatter={(value) => [formatNativeMoney(Number(value), currency), "Value"]} />
         </PieChart>
       </ResponsiveContainer>
     </div>

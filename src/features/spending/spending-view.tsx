@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { calculateSpending, spendingAmountToUsd } from "@/lib/calculations";
+import { calculateSpending, latestSpendingMonth, spendingAmountToUsd } from "@/lib/calculations";
 import { formatDate, formatMoney, formatNativeMoney, formatPct, monthKey } from "@/lib/format";
 import { ApiClientError } from "@/lib/api-client";
 import { useTerminalStore } from "@/store/terminal-store";
@@ -29,7 +29,7 @@ export function SpendingView() {
   const batches = useTerminalStore((state) => state.importBatches);
   const profile = useTerminalStore((state) => state.profile);
   const rates = useTerminalStore((state) => state.fxRates);
-  const [month, setMonth] = useState(monthKey());
+  const [monthOverride, setMonthOverride] = useState<string>();
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -45,6 +45,7 @@ export function SpendingView() {
   const deleteSpendingCarryover = useTerminalStore((state) => state.deleteSpendingCarryover);
   const currency = profile.displayCurrency;
   const monthOptions = useMemo(() => Array.from(new Set(spending.map((item) => item.reportMonth ?? item.occurredOn.slice(0, 7)))).sort().reverse(), [spending]);
+  const month = monthOverride ?? latestSpendingMonth(spending);
   const matchingSpending = useMemo(() => {
     const query = search.trim().toLowerCase();
     return query
@@ -162,7 +163,7 @@ export function SpendingView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Personal cash flow" title="Spending" description="Compare income and expenses, audit category totals, and review Money Lover imports before persistence." actions={<><Select value={month} onValueChange={(value) => { setMonth(value); setSelectedIds(new Set()); }}><SelectTrigger className="w-40"><CalendarDays className="size-3.5 text-muted-foreground" /><SelectValue /></SelectTrigger><SelectContent>{monthOptions.map((key) => <SelectItem key={key} value={key}>{new Date(`${key}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</SelectItem>)}</SelectContent></Select><Button variant="outline" size="sm" onClick={() => { setEditing(undefined); setEditorOpen(true); }}><Plus />Add transaction</Button><Button size="sm" onClick={() => setImportOpen(true)}><FileUp />Import Money Lover</Button><Button variant="destructive" size="sm" disabled={!selectedMonthTransactions.length} onClick={() => setMonthDeleteOpen(true)}><Trash2 />Delete month</Button></>} />
+      <PageHeader eyebrow="Personal cash flow" title="Spending" description="Compare income and expenses, audit category totals, and review Money Lover imports before persistence." actions={<><Select value={month} onValueChange={(value) => { setMonthOverride(value); setSelectedIds(new Set()); }}><SelectTrigger className="w-40"><CalendarDays className="size-3.5 text-muted-foreground" /><SelectValue /></SelectTrigger><SelectContent>{monthOptions.map((key) => <SelectItem key={key} value={key}>{new Date(`${key}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</SelectItem>)}</SelectContent></Select><Button variant="outline" size="sm" onClick={() => { setEditing(undefined); setEditorOpen(true); }}><Plus />Add transaction</Button><Button size="sm" onClick={() => setImportOpen(true)}><FileUp />Import Money Lover</Button><Button variant="destructive" size="sm" disabled={!selectedMonthTransactions.length} onClick={() => setMonthDeleteOpen(true)}><Trash2 />Delete month</Button></>} />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard label="Income" value={formatMoney(summary.incomeUsd, currency, rates)} trend={formatMoney(summary.previousIncomeUsd, currency, rates)} trendDirection="up" detail="last month" icon={<ArrowUpRight />} />
         <MetricCard label="Expenses" value={formatMoney(summary.expensesUsd, currency, rates)} trend={formatPct(summary.expenseChangePct, true)} trendDirection={new Decimal(summary.expenseChangePct).lte(0) ? "up" : "down"} detail="vs last month" icon={<ArrowDownRight />} />
@@ -171,7 +172,7 @@ export function SpendingView() {
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Card><CardHeader><SectionHeader title="Six-month cash-flow trend" description="Income and expenses from the records matching the current filters." meta={<div className="flex gap-3 text-[10px] text-muted-foreground"><span className="flex items-center gap-1.5"><i className="size-2 rounded-sm bg-success" />Income</span><span className="flex items-center gap-1.5"><i className="size-2 rounded-sm bg-primary" />Expenses</span></div>} /></CardHeader><CardContent className="pl-2"><SpendingTrendChart data={trendData} currency={currency} rates={rates} /></CardContent></Card>
-        <Card><CardHeader><SectionHeader title="Expense categories" description={`${summary.byCategory.length} categories this month.`} meta={<Tags className="size-4 text-muted-foreground" />} /></CardHeader><CardContent className="space-y-4">{summary.byCategory.map((item) => <div key={item.category}><div className="mb-1.5 flex items-center justify-between gap-3"><span className="text-xs font-medium">{item.category}</span><span className="numeric text-xs">{formatMoney(item.amountUsd, currency, rates)}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-primary" style={{ width: `${Number(item.amountUsd) / maxCategory * 100}%` }} /></div></div>)}{!summary.byCategory.length && <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">No expenses this month.</div>}</CardContent></Card>
+        <Card><CardHeader><SectionHeader title="Expense categories" description={`${summary.byCategory.length} categories this month.`} meta={<Tags className="size-4 text-muted-foreground" />} /></CardHeader><CardContent className="h-64 space-y-4 overflow-y-auto pr-3">{summary.byCategory.map((item) => <div key={item.category}><div className="mb-1.5 flex items-center justify-between gap-3"><span className="text-xs font-medium">{item.category}</span><span className="numeric text-xs">{formatMoney(item.amountUsd, currency, rates)}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-primary" style={{ width: `${Number(item.amountUsd) / maxCategory * 100}%` }} /></div></div>)}{!summary.byCategory.length && <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">No expenses this month.</div>}</CardContent></Card>
       </div>
       <Card>
         <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between"><SectionHeader title="Spending ledger" description={`${filtered.length} records in the selected period.`} meta={latestBatch && <Badge variant="info"><FileSpreadsheet />Last import: {latestBatch.acceptedRows} rows</Badge>} /><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><Button variant="destructive" size="sm" disabled={!selectedVisibleIds.length} onClick={() => setBulkDeleteOpen(true)}><Trash2 />Delete selected ({selectedVisibleIds.length})</Button><div className="relative sm:w-64"><Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => { setSearch(event.target.value); setSelectedIds(new Set()); }} className="pl-9" placeholder="Search category or account" /></div></div></CardHeader>
@@ -241,7 +242,7 @@ export function SpendingView() {
         </CardContent>
       </Card>
       <div className="grid gap-3 sm:grid-cols-3"><Info icon={Landmark} title="Normalized direction" description="Debit, credit, negative, income, and expense conventions are reviewed before import." /><Info icon={FileSpreadsheet} title="User-scoped duplicate check" description="Normalized rows receive a SHA-256 fingerprint; matching rows are skipped." /><Info icon={CircleDollarSign} title="Display conversion" description="Stored decimal values are rendered using the visible timestamped FX snapshot." /></div>
-      <ImportWizard open={importOpen} onOpenChange={setImportOpen} kind="spending" selectedMonth={month} onSelectedMonthChange={setMonth} />
+      <ImportWizard open={importOpen} onOpenChange={setImportOpen} kind="spending" selectedMonth={month} onSelectedMonthChange={setMonthOverride} />
       <SpendingEditor key={`${editing?.id ?? "new"}-${editorOpen ? "open" : "closed"}`} open={editorOpen} onOpenChange={setEditorOpen} transaction={editing} />
       <Dialog open={monthDeleteOpen} onOpenChange={(open) => !deletingMonth && setMonthDeleteOpen(open)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Delete all transactions for {selectedMonthLabel}?</DialogTitle><DialogDescription>This permanently deletes all {selectedMonthTransactions.length} transaction{selectedMonthTransactions.length === 1 ? "" : "s"} in the selected month, including income and expenses. This cannot be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setMonthDeleteOpen(false)} disabled={deletingMonth}>Cancel</Button><Button variant="destructive" onClick={() => void deleteSelectedMonth()} disabled={deletingMonth}>{deletingMonth ? "Deleting…" : "Delete all transactions"}</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={bulkDeleteOpen} onOpenChange={(open) => !deletingSelected && setBulkDeleteOpen(open)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Delete {selectedVisibleIds.length} selected transaction{selectedVisibleIds.length === 1 ? "" : "s"}?</DialogTitle><DialogDescription>This permanently deletes only the transactions selected in the current ledger view. This cannot be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setBulkDeleteOpen(false)} disabled={deletingSelected}>Cancel</Button><Button variant="destructive" onClick={() => void deleteSelectedTransactions()} disabled={deletingSelected}>{deletingSelected ? "Deleting…" : "Delete selected transactions"}</Button></DialogFooter></DialogContent></Dialog>

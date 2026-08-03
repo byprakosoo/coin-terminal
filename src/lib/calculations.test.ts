@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePortfolio, calculateSpending } from "@/lib/calculations";
+import { calculatePortfolio, calculateSpending, latestSpendingMonth } from "@/lib/calculations";
 import type { MarketPrice, PortfolioTransaction, SpendingTransaction } from "@/lib/types";
 
 const price: MarketPrice = {
@@ -62,6 +62,16 @@ describe("calculatePortfolio", () => {
 });
 
 describe("calculateSpending", () => {
+  it("resolves the latest report month and ignores the current empty calendar month", () => {
+    const rows: SpendingTransaction[] = [
+      { id: "older", occurredOn: "2026-06-03", amount: "500", currency: "USD", direction: "EXPENSE", category: "Housing", account: "Bank" },
+      { id: "latest", occurredOn: "2026-07-03", amount: "400", currency: "USD", direction: "EXPENSE", category: "Food", account: "Card" },
+    ];
+
+    expect(latestSpendingMonth(rows, "2026-08")).toBe("2026-07");
+    expect(latestSpendingMonth([], "2026-08")).toBe("2026-08");
+  });
+
   it("calculates monthly totals, savings, comparisons, and categories", () => {
     const rows: SpendingTransaction[] = [
       { id: "1", occurredOn: "2026-07-01", amount: "1000", currency: "USD", direction: "INCOME", category: "Salary", account: "Bank" },

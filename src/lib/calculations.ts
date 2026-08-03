@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import { previousMonth } from "@/lib/format";
+import { monthKey, previousMonth } from "@/lib/format";
 import type {
   Holding,
   FxRate,
@@ -20,6 +20,12 @@ export function spendingAmountToUsd(
 ) {
   const rate = new Decimal(rates.find((item) => item.currency === currency)?.usdRate ?? "1");
   return rate.gt(0) ? new Decimal(amount).div(rate).toString() : new Decimal(amount).toString();
+}
+
+export function latestSpendingMonth(transactions: SpendingTransaction[], fallback = monthKey()) {
+  return Array.from(
+    new Set(transactions.map((item) => item.reportMonth ?? item.occurredOn.slice(0, 7))),
+  ).sort().at(-1) ?? fallback;
 }
 
 export function calculatePortfolio(
