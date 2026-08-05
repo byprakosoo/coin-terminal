@@ -2,19 +2,24 @@ import Decimal from "decimal.js";
 import { calculatePortfolio, calculateSpending } from "@/lib/calculations";
 import { defensiveRuleVersion } from "@/lib/btc-defensive-strategy";
 import { btcResearchRuleVersion } from "@/lib/btc-research-rule";
-import { formatMoney as formatMoneyValue, formatPct, monthKey, previousMonth } from "@/lib/format";
+import { formatMoney as formatMoneyValue, formatNativeMoney, formatPct, monthKey, previousMonth } from "@/lib/format";
 import type {
+  Alert,
   AssistantToolName,
+  BtcStrategyProfile,
   BtcSignal,
   Freshness,
   FxRate,
   DisplayCurrency,
+  MarketPoint,
   MarketPrice,
   PortfolioTransaction,
   SourceReceipt,
   SpendingTransaction,
   TokenFlowEvent,
+  WatchlistWallet,
 } from "@/lib/types";
+import type { PortfolioRecapSummary } from "@/features/portfolio-recap/types";
 
 export interface AssistantContext {
   transactions: PortfolioTransaction[];
@@ -24,6 +29,11 @@ export interface AssistantContext {
   events: TokenFlowEvent[];
   fxRates?: FxRate[];
   displayCurrency?: DisplayCurrency;
+  marketHistory?: MarketPoint[];
+  wallets?: WatchlistWallet[];
+  alerts?: Alert[];
+  portfolioRecap?: PortfolioRecapSummary;
+  strategyProfile?: BtcStrategyProfile;
 }
 
 export interface AssistantReply {
@@ -76,6 +86,42 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     holding.name.toLowerCase() === requestedAsset?.toLowerCase(),
   );
   const btcSignalIntent = /signal|defensive|model target|target allocation|shadow|validated|\bwatch\b|research verdict|buy or sell|should i (?:buy|sell)|\bentry\b|\bexit\b|outlook|momentum|\brsi\b|technical trend/.test(normalized);
+
+  if (/total (?:portfolio )?(?:value|worth)|portfolio value|net worth|all assets|entire portfolio/.test(normalized)) {
+    const latestSnapshot = context.portfolioRecap?.snapshots.at(-1);
+    const latestSummary = context.portfolioRecap?.latestSummary;
+    if (!latestSnapshot || !latestSummary) {
+      return {
+        content: "No all-assets Monthly History snapshot is available yet. I cannot calculate total portfolio value from the crypto ledger alone; add a Monthly History snapshot first.",
+        toolName: "getPortfolioSummary",
+        sources: [receipt("All-assets Monthly History data-quality check", now, "CALCULATED", "MISSING", "Monthly History snapshot required")],
+        investmentRelated: true,
+      };
+    }
+    const formatSnapshotIdr = (value: string) => {
+      if (displayCurrency === "IDR") return formatNativeMoney(value, "IDR");
+      if (latestSnapshot.idrPerUsd && new Decimal(latestSnapshot.idrPerUsd).gt(0)) {
+        return formatNativeMoney(new Decimal(value).div(latestSnapshot.idrPerUsd).toString(), "USD");
+      }
+      return `${formatNativeMoney(value, "IDR")} (USD conversion unavailable)`;
+    };
+    const breakdown = [
+      ["Bank", latestSnapshot.bankIdr],
+      ["RDPU", latestSnapshot.rdpuIdr],
+      ["IHSG", latestSnapshot.ihsgIdr],
+      ["S&P 500", latestSnapshot.sp500Idr],
+      ["BTC", latestSnapshot.btcIdr],
+      ["ETH", latestSnapshot.ethIdr],
+      ["Altcoin", latestSnapshot.altcoinIdr],
+      ["Gold", latestSnapshot.goldIdr],
+    ].map(([label, value]) => `${label} ${formatSnapshotIdr(value)}`).join(", ");
+    return {
+      content: `Your total portfolio value across all assets is ${formatSnapshotIdr(latestSummary.totalIdr)}, based on the latest Monthly History snapshot as of ${latestSnapshot.asOfDate}. Breakdown: ${breakdown}. This is the latest persisted all-assets snapshot, not a live intraday valuation.`,
+      toolName: "getPortfolioSummary",
+      sources: [receipt("Monthly History Net Worth snapshot", latestSnapshot.asOfDate, "OBSERVED", "FRESH", `All-assets snapshot as of ${latestSnapshot.asOfDate}`)],
+      investmentRelated: true,
+    };
+  }
 
   if (/expense|spend|spending|spent|saving|savings|income|cash flow|budget|category/.test(normalized)) {
     const currentMonth = monthKey();

@@ -6,8 +6,10 @@ import { buildAssistantReply } from "@/lib/assistant";
 import { getActiveAiModelConfig } from "@/server/ai-models";
 import { generateAssistantAnswer } from "@/server/ai-portfolio-assistant";
 import { ApiError } from "@/server/api";
+import { getBtcStrategyProfile } from "@/server/btc-strategy";
 import { createId } from "@/server/ids";
 import { mapConversation, mapMessage } from "@/server/mappers";
+import { getPortfolioRecap } from "@/server/portfolio-recap";
 import { loadWorkspace } from "@/server/workspace";
 
 export async function createConversation(userId: string, title = "New conversation") {
@@ -59,14 +61,23 @@ export async function sendConversationMessage(
   content: string,
 ) {
   await requireConversation(userId, conversationId);
-  const workspace = await loadWorkspace(userId);
+  const [workspace, portfolioRecap, strategyProfile] = await Promise.all([
+    loadWorkspace(userId),
+    getPortfolioRecap(userId),
+    getBtcStrategyProfile(userId),
+  ]);
   const historyRows = await db
     .select({ role: aiMessages.role, content: aiMessages.content })
     .from(aiMessages)
     .where(eq(aiMessages.conversationId, conversationId))
     .orderBy(desc(aiMessages.createdAt))
     .limit(8);
-  const assistantContext = { ...workspace, displayCurrency: workspace.profile.displayCurrency };
+  const assistantContext = {
+    ...workspace,
+    displayCurrency: workspace.profile.displayCurrency,
+    portfolioRecap,
+    strategyProfile,
+  };
   const customConfig = await getActiveAiModelConfig(userId);
   const groundedReply = buildAssistantReply(content, assistantContext);
   const generation = await generateAssistantAnswer({
@@ -115,6 +126,8 @@ export async function sendConversationMessage(
       requestSummary: {
         questionLength: content.length,
         identitySource: "authenticated-session",
+        scope: "user-id-filtered",
+        retrieval: "structured-rag-full-ledger-aggregates-plus-relevant-evidence",
         modelContext: "allowlisted-financial-fields-without-record-ids-or-notes",
       },
       resultSummary: {

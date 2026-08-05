@@ -33,6 +33,47 @@ describe("AI portfolio assistant", () => {
     expect(modelContext.portfolio.holdings.length).toBeGreaterThan(0);
   });
 
+  it("uses full-ledger aggregates while retrieving only question-relevant transaction rows", () => {
+    const modelContext = buildPortfolioModelContext({
+      question: "Review my BTC transaction history",
+      context,
+      groundedReply,
+    });
+
+    expect(modelContext.portfolioTransactionLedger.totalRecords).toBe(context.transactions.length);
+    expect(modelContext.portfolioTransactionCoverage.filters.asset).toBe("BTC");
+    expect(modelContext.portfolioTransactions.every((row) => row.assetSymbol === "BTC")).toBe(true);
+    expect(modelContext.spendingLedger.totalRecords).toBe(context.spending.length);
+    expect(modelContext.instructionsForDataUse).toContain("full-dataset aggregates");
+  });
+
+  it("uses the latest all-assets Monthly History snapshot for total portfolio value", () => {
+    const reply = buildAssistantReply("What is my total portfolio value today?", {
+      ...context,
+      displayCurrency: "IDR",
+      portfolioRecap: {
+        snapshots: [{
+          asOfDate: "2026-07-31",
+          bankIdr: "700000",
+          rdpuIdr: "0",
+          ihsgIdr: "0",
+          sp500Idr: "0",
+          btcIdr: "200000",
+          ethIdr: "100000",
+          altcoinIdr: "0",
+          goldIdr: "0",
+          idrPerUsd: "16000",
+        }],
+        latestSummary: { totalIdr: "1000000" },
+      },
+    } as never);
+
+    expect(reply.content).toContain("1,000,000");
+    expect(reply.content).toContain("2026-07-31");
+    expect(reply.content).toContain("Monthly History");
+    expect(reply.content).not.toContain("crypto ledger alone");
+  });
+
   it("uses deterministic output when an API key is not configured", async () => {
     const result = await generateAssistantAnswer({
       question: "What is my portfolio worth?",
