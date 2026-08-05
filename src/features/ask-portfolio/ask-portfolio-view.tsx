@@ -46,7 +46,7 @@ export function AskPortfolioView() {
     <div className="space-y-6">
       <PageHeader eyebrow="Grounded AI assistant" title="Ask Portfolio" description="Ask open-ended questions about the same portfolio, spending, signal, and wallet records shown across the terminal; model synthesis fails safely to deterministic selectors." actions={<><Badge variant="success"><ShieldCheck />Grounded context</Badge><Button size="sm" onClick={() => void handleNew()}><MessageSquarePlus />New conversation</Button></>} />
       <Card className="relative h-[calc(100vh-15.75rem)] min-h-[620px] overflow-hidden">
-        <div className="grid h-full md:grid-cols-[260px_1fr] xl:grid-cols-[300px_1fr]">
+        <div className="grid h-full min-h-0 md:grid-cols-[260px_1fr] xl:grid-cols-[300px_1fr]">
           <aside className={cn("border-r bg-background/35", mobileThreads ? "absolute inset-x-4 z-20 mt-14 h-[calc(100%-8rem)] rounded-lg border shadow-2xl md:static md:mt-0 md:h-auto md:rounded-none md:border-y-0 md:border-l-0 md:shadow-none" : "hidden md:block")}>
             <div className="flex h-14 items-center justify-between border-b px-4"><p className="text-xs font-semibold">Conversations</p><Button variant="ghost" size="icon-sm" onClick={() => void handleNew()} aria-label="New conversation"><MessageSquarePlus /></Button></div>
             <div className="h-[calc(100%-3.5rem)] overflow-y-auto p-2">
@@ -54,9 +54,9 @@ export function AskPortfolioView() {
               {!conversations.length && <div className="p-5 text-center"><CircleHelp className="mx-auto size-5 text-muted-foreground" /><p className="mt-2 text-xs text-muted-foreground">No conversations yet.</p></div>}
             </div>
           </aside>
-          <section className="flex min-w-0 flex-col">
+          <section className="flex min-h-0 min-w-0 flex-col">
             <div className="flex h-14 items-center justify-between border-b px-4"><div className="flex items-center gap-2"><Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setMobileThreads((value) => !value)} aria-label="Show conversations"><PanelLeft /></Button><span className="flex size-7 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary"><Bot className="size-3.5" /></span><div><p className="text-xs font-medium">Portfolio Assistant</p><p className="font-mono text-[9px] text-success">GROUNDED AI · FALLBACK SAFE</p></div></div><Badge variant="neutral"><Database />Authenticated data</Badge></div>
-            <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
               {!activeMessages.length ? <EmptyChat onSuggestion={(value) => void submit(value)} /> : <div className="mx-auto max-w-3xl space-y-5">{activeMessages.map((message) => <MessageBubble key={message.id} message={message} />)}<div ref={bottomRef} /></div>}
             </div>
             <div className="border-t bg-background/65 p-3 sm:p-4"><div className="mx-auto max-w-3xl"><div className="rounded-lg border bg-card p-2 shadow-lg shadow-black/10 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10"><Textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="Ask about portfolio, spending, BTC signals, or wallet events…" className="min-h-[58px] resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0" /><div className="flex items-center justify-between gap-2 px-1"><p className="hidden text-[10px] text-muted-foreground sm:block">Enter to send · Shift + Enter for a new line</p><Button size="sm" className="ml-auto" onClick={() => void submit()} disabled={!draft.trim() || sending}>{sending ? "Working…" : "Send"}<Send /></Button></div></div><p className="mt-2 text-center text-[9px] text-muted-foreground">Answers use allowlisted authenticated data, preserve source receipts, and disclose model or fallback generation per response.</p></div></div>

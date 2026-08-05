@@ -490,11 +490,6 @@ export async function seedDemoWorkspace(userId: string) {
 
 export async function loadWorkspace(userId: string, signedInAt = new Date()) {
   await ensureWorkspace(userId);
-  try {
-    await syncMarketData();
-  } catch (error) {
-    console.error("Market data refresh failed; loading persisted workspace without a live ticker.", error);
-  }
 
   const [
     profileRows,
@@ -681,6 +676,15 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     messages,
     importBatches: batchRows.map(mapImportBatch),
   };
+}
+
+/** Refresh live market data outside the bootstrap request's critical path. */
+export async function refreshMarketData() {
+  try {
+    await syncMarketData();
+  } catch (error) {
+    console.error("Market data refresh failed; keeping the persisted market snapshot.", error);
+  }
 }
 
 async function removeLegacyDemoRecords(userId: string) {

@@ -79,7 +79,14 @@ export function OverviewView() {
   const topWarnings = alerts.filter((alert) => !alert.readAt || alert.severity !== "INFO").slice(0, 3);
   const currency = profile.displayCurrency;
   const [strategy, setStrategy] = useState<BtcStrategyProfile>();
-  useEffect(() => { let active = true; void apiRequest<BtcStrategyProfile>("/api/research/btc/strategy").then((result) => { if (active) setStrategy(result); }).catch(() => undefined); return () => { active = false; }; }, []);
+  useEffect(() => {
+    if (signal) return;
+    let active = true;
+    void apiRequest<BtcStrategyProfile>("/api/research/btc/strategy")
+      .then((result) => { if (active) setStrategy(result); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [signal]);
 
   return (
     <div className="space-y-6">
