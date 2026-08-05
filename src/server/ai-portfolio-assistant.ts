@@ -7,7 +7,7 @@ import type { AssistantFallbackReason, AssistantGenerationMode } from "@/lib/typ
 import type { ActiveAiModelConfig } from "@/server/ai-models";
 
 const defaultGatewayModel = "openai/gpt-5.6-luna";
-const defaultOpenAiModel = "gpt-5.6";
+const defaultOpenAiModel = "gpt-5.6-luna";
 const gatewayUrl = "https://ai-gateway.vercel.sh/v1/responses";
 const openAiUrl = "https://api.openai.com/v1/responses";
 const maxPortfolioTransactions = 200;
@@ -44,6 +44,7 @@ interface ModelProvider {
   url: string;
   provider?: string;
   providerType?: AiModelProvider;
+  accountId?: string;
 }
 
 interface GenerateAssistantAnswerInput {
@@ -107,6 +108,7 @@ function resolveModelProviders(input: GenerateAssistantAnswerInput): ModelProvid
       url: input.customConfig.endpointUrl,
       provider: input.customConfig.label,
       providerType: input.customConfig.provider,
+      accountId: input.customConfig.accountId,
     }];
   }
   const gatewayToken = input.gatewayToken ??
@@ -147,6 +149,7 @@ async function requestModel(
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
+  const isCodex = provider.providerType === "OPENAI_CODEX";
   try {
     const response = await fetcher(provider.url, {
       method: "POST",
@@ -156,7 +159,16 @@ async function requestModel(
               "x-api-key": provider.token,
               "anthropic-version": "2023-06-01",
             }
-          : { authorization: `Bearer ${provider.token}` }),
+          : {
+              authorization: `Bearer ${provider.token}`,
+              ...(isCodex
+                ? {
+                    originator: "codex_cli_rs",
+                    "user-agent": "codex_cli_rs/0.0.0 (Coin Terminal)",
+                    ...(provider.accountId ? { "ChatGPT-Account-ID": provider.accountId } : {}),
+                  }
+                : {}),
+            }),
         "content-type": "application/json",
       },
       body: JSON.stringify(
@@ -166,6 +178,15 @@ async function requestModel(
               max_tokens: 700,
               system: assistantInstructions,
               messages: [{ role: "user", content: JSON.stringify(modelContext) }],
+            }
+          : isCodex
+          ? {
+              model: provider.model,
+              store: false,
+              stream: false,
+              max_output_tokens: 700,
+              instructions: assistantInstructions,
+              input: [{ type: "message", role: "user", content: JSON.stringify(modelContext) }],
             }
           : provider.mode === "VERCEL_AI_GATEWAY" ||
               provider.mode === "OPENAI" ||

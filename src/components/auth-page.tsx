@@ -90,9 +90,9 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
           <Card className="bg-card/82 shadow-2xl shadow-black/25">
             <CardContent className="p-5 sm:p-6">
               <form onSubmit={submit} className="space-y-4" noValidate>
-                {mode === "register" && <Field label="Full name" error={form.formState.errors.name?.message}><Input autoComplete="name" {...form.register("name")} /></Field>}
-                <Field label="Email" error={form.formState.errors.email?.message}><Input type="email" autoComplete="email" {...form.register("email")} aria-invalid={!!form.formState.errors.email} /></Field>
-                <Field label="Password" error={form.formState.errors.password?.message}><Input type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} {...form.register("password")} aria-invalid={!!form.formState.errors.password} /></Field>
+                {mode === "register" && <Field label="Full name" error={form.formState.errors.name?.message}><Input suppressHydrationWarning autoComplete="name" {...form.register("name")} /></Field>}
+                <Field label="Email" error={form.formState.errors.email?.message}><Input suppressHydrationWarning type="email" autoComplete="email" {...form.register("email")} aria-invalid={!!form.formState.errors.email} /></Field>
+                <Field label="Password" error={form.formState.errors.password?.message}><Input suppressHydrationWarning type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} {...form.register("password")} aria-invalid={!!form.formState.errors.password} /></Field>
                 {serverError && <div className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{serverError}</div>}
                 <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Please wait…" : mode === "sign-in" ? "Open terminal" : "Continue to setup"}<ArrowRight /></Button>
               </form>

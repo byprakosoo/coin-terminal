@@ -12,6 +12,8 @@ export const env = {
     process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   cronSecret: process.env.CRON_SECRET,
   etherscanApiKey: process.env.ETHERSCAN_API_KEY,
+  openAiCodexClientId: process.env.OPENAI_CODEX_CLIENT_ID ?? "app_EMoamEEZ73f0CkXaXp7hrann",
+  openAiCodexBaseUrl: process.env.OPENAI_CODEX_BASE_URL ?? "https://chatgpt.com/backend-api/codex",
 } as const;
 
 export function assertProductionEnv() {

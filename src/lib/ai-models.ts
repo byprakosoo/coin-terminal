@@ -1,4 +1,4 @@
-export type AiModelProvider = "OPENAI" | "ANTHROPIC" | "KIMI" | "OPENAI_COMPATIBLE";
+export type AiModelProvider = "OPENAI" | "OPENAI_CODEX" | "ANTHROPIC" | "KIMI" | "OPENAI_COMPATIBLE";
 
 export interface AiModelConfigSummary {
   id: string;
@@ -30,8 +30,14 @@ export const AI_MODEL_PRESETS: Record<AiModelProvider, {
   OPENAI: {
     label: "OpenAI",
     endpointUrl: "https://api.openai.com/v1/responses",
-    modelPlaceholder: "gpt-5 or gpt-4o-mini",
-    help: "OpenAI Responses API",
+    modelPlaceholder: "gpt-5.6-luna",
+    help: "OpenAI Responses API · cost-sensitive · requires a Platform API key",
+  },
+  OPENAI_CODEX: {
+    label: "ChatGPT / Codex",
+    endpointUrl: "https://chatgpt.com/backend-api/codex/responses",
+    modelPlaceholder: "gpt-5.6-luna",
+    help: "ChatGPT OAuth · uses your eligible ChatGPT/Codex account",
   },
   ANTHROPIC: {
     label: "Claude / Anthropic",

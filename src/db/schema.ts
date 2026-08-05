@@ -56,7 +56,7 @@ export const aiModelConfigs = mysqlTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     label: varchar("label", { length: 120 }).notNull(),
-    provider: mysqlEnum("provider", ["OPENAI", "ANTHROPIC", "KIMI", "OPENAI_COMPATIBLE"]).notNull(),
+    provider: mysqlEnum("provider", ["OPENAI", "OPENAI_CODEX", "ANTHROPIC", "KIMI", "OPENAI_COMPATIBLE"]).notNull(),
     model: varchar("model", { length: 180 }).notNull(),
     endpointUrl: varchar("endpoint_url", { length: 500 }).notNull(),
     apiKeyCiphertext: text("api_key_ciphertext").notNull(),
@@ -71,6 +71,29 @@ export const aiModelConfigs = mysqlTable(
   (table) => [
     index("ai_model_configs_user_updated_idx").on(table.userId, table.updatedAt),
     index("ai_model_configs_user_active_idx").on(table.userId, table.active),
+  ],
+);
+
+export const aiOauthDeviceLogins = mysqlTable(
+  "ai_oauth_device_logins",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: mysqlEnum("provider", ["OPENAI_CODEX"]).notNull(),
+    deviceAuthId: varchar("device_auth_id", { length: 255 }).notNull(),
+    userCode: varchar("user_code", { length: 80 }).notNull(),
+    status: mysqlEnum("status", ["PENDING", "COMPLETED", "FAILED", "EXPIRED"])
+      .notNull()
+      .default("PENDING"),
+    expiresAt: timestamp("expires_at").notNull(),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  },
+  (table) => [
+    index("ai_oauth_device_logins_user_created_idx").on(table.userId, table.createdAt),
+    index("ai_oauth_device_logins_status_expires_idx").on(table.status, table.expiresAt),
   ],
 );
 

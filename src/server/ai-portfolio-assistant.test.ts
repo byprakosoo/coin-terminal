@@ -132,6 +132,46 @@ describe("AI portfolio assistant", () => {
     expect(result.reply.content).toBe("Kimi answer.");
   });
 
+  it("uses the ChatGPT OAuth Codex request shape without exposing the token", async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request, request?: RequestInit) => {
+      expect(url).toBe("https://chatgpt.com/backend-api/codex/responses");
+      const headers = new Headers(request?.headers);
+      expect(headers.get("authorization")).toBe("Bearer oauth-access-token");
+      expect(headers.get("originator")).toBe("codex_cli_rs");
+      expect(headers.get("ChatGPT-Account-ID")).toBe("account-123");
+      const body = JSON.parse(String(request?.body)) as {
+        model: string;
+        instructions: string;
+        input: Array<{ role: string }>;
+      };
+      expect(body.model).toBe("gpt-5.6-luna");
+      expect(body.instructions).toContain("Coin Terminal's grounded portfolio assistant");
+      expect(body.input).toEqual([{ type: "message", role: "user", content: expect.any(String) }]);
+      return new Response(JSON.stringify({ output_text: "Codex answer." }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      customConfig: {
+        label: "ChatGPT / Codex",
+        provider: "OPENAI_CODEX",
+        model: "gpt-5.6-luna",
+        endpointUrl: "https://chatgpt.com/backend-api/codex/responses",
+        apiKey: "oauth-access-token",
+        accountId: "account-123",
+      },
+      fetcher,
+    });
+
+    expect(result.mode).toBe("CUSTOM_AI");
+    expect(result.provider).toBe("ChatGPT / Codex");
+    expect(result.reply.content).toBe("Codex answer.");
+  });
+
   it("prefers Vercel AI Gateway and sends developer rules separately from data", async () => {
     const fetcher = vi.fn(async (url: string | URL | Request, request?: RequestInit) => {
       void url;
