@@ -48,6 +48,32 @@ export const users = mysqlTable(
   (table) => [uniqueIndex("users_email_unique").on(table.email)],
 );
 
+export const aiModelConfigs = mysqlTable(
+  "ai_model_configs",
+  {
+    id: id().primaryKey(),
+    userId: id("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 120 }).notNull(),
+    provider: mysqlEnum("provider", ["OPENAI", "ANTHROPIC", "KIMI", "OPENAI_COMPATIBLE"]).notNull(),
+    model: varchar("model", { length: 180 }).notNull(),
+    endpointUrl: varchar("endpoint_url", { length: 500 }).notNull(),
+    apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+    apiKeyHint: varchar("api_key_hint", { length: 12 }).notNull(),
+    active: boolean("active").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("ai_model_configs_user_updated_idx").on(table.userId, table.updatedAt),
+    index("ai_model_configs_user_active_idx").on(table.userId, table.active),
+  ],
+);
+
 export const sessions = mysqlTable(
   "sessions",
   {

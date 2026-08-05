@@ -7,6 +7,7 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL ?? localDatabaseUrl,
   databaseSsl: process.env.DATABASE_SSL === "true",
   betterAuthSecret: process.env.BETTER_AUTH_SECRET ?? localAuthSecret,
+  aiCredentialsEncryptionKey: process.env.AI_CREDENTIALS_ENCRYPTION_KEY,
   betterAuthUrl:
     process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   cronSecret: process.env.CRON_SECRET,

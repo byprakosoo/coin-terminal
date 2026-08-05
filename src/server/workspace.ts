@@ -595,6 +595,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
       generationMode:
         generationMode === "VERCEL_AI_GATEWAY" ||
         generationMode === "OPENAI" ||
+        generationMode === "CUSTOM_AI" ||
         generationMode === "DETERMINISTIC"
           ? generationMode
           : undefined,
@@ -609,6 +610,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
           ? generationFallbackReason
           : undefined,
       model: typeof model === "string" ? model : undefined,
+      provider: typeof call?.resultSummary?.provider === "string" ? call.resultSummary.provider : undefined,
     };
   });
 

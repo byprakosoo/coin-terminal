@@ -161,6 +161,11 @@ The required and optional variables are documented in `.env.example`.
 
 - A model credential is optional. Without one, Ask Portfolio returns its
   authenticated deterministic answer.
+- Ask Portfolio can save multiple per-user OpenAI, Claude/Anthropic, Kimi, or
+  OpenAI-compatible model configurations. API keys are encrypted server-side;
+  run `npm run db:migrate` after deploying the `ai_model_configs` migration.
+- Set `AI_CREDENTIALS_ENCRYPTION_KEY` in production when you want a separate
+  encryption key for saved AI credentials; it falls back to `BETTER_AUTH_SECRET`.
 - Vercel deployments can use the project-scoped OIDC token with AI Gateway.
 - Direct OpenAI access is an optional secondary synthesis provider.
 - Etherscan credentials are only required for supported EVM wallet ingestion.

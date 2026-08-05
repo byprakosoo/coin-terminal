@@ -216,6 +216,22 @@ export const assistantMessageSchema = z.object({
   content: z.string().trim().min(1).max(8_000),
 });
 
+export const aiModelConfigSchema = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().min(1).max(120),
+  provider: z.enum(["OPENAI", "ANTHROPIC", "KIMI", "OPENAI_COMPATIBLE"]),
+  model: z.string().trim().min(1).max(180),
+  endpointUrl: z.string().trim().max(500).optional(),
+  apiKey: z.preprocess(
+    (value) => typeof value === "string" && !value.trim() ? undefined : value,
+    z.string().trim().min(1).max(4_000).optional(),
+  ),
+});
+
+export const aiModelActivationSchema = z.object({
+  active: z.boolean(),
+});
+
 export function assertWalletAddress(chain: string, address: string) {
   const valid =
     chain === "Bitcoin"

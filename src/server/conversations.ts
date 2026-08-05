@@ -3,6 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { aiConversations, aiMessages, aiToolCalls } from "@/db/schema";
 import { buildAssistantReply } from "@/lib/assistant";
+import { getActiveAiModelConfig } from "@/server/ai-models";
 import { generateAssistantAnswer } from "@/server/ai-portfolio-assistant";
 import { ApiError } from "@/server/api";
 import { createId } from "@/server/ids";
@@ -66,12 +67,14 @@ export async function sendConversationMessage(
     .orderBy(desc(aiMessages.createdAt))
     .limit(8);
   const assistantContext = { ...workspace, displayCurrency: workspace.profile.displayCurrency };
+  const customConfig = await getActiveAiModelConfig(userId);
   const groundedReply = buildAssistantReply(content, assistantContext);
   const generation = await generateAssistantAnswer({
     question: content,
     context: assistantContext,
     groundedReply,
     history: historyRows.reverse(),
+    customConfig,
   });
   const reply = generation.reply;
   const userMessageId = createId();
@@ -119,6 +122,7 @@ export async function sendConversationMessage(
         freshness: reply.sources.map((source) => source.freshness),
         generationMode: generation.mode,
         model: generation.model,
+        provider: generation.provider,
         fallbackReason: generation.fallbackReason,
       },
     });
@@ -149,6 +153,7 @@ export async function sendConversationMessage(
       generationMode: generation.mode,
       generationFallbackReason: generation.fallbackReason,
       model: generation.model,
+      provider: generation.provider,
     },
   };
 }
@@ -181,6 +186,7 @@ function generationMetadata(resultSummary: Record<string, unknown> | null | unde
     generationMode:
       generationMode === "VERCEL_AI_GATEWAY" ||
       generationMode === "OPENAI" ||
+      generationMode === "CUSTOM_AI" ||
       generationMode === "DETERMINISTIC"
         ? generationMode
         : undefined,
@@ -195,6 +201,7 @@ function generationMetadata(resultSummary: Record<string, unknown> | null | unde
         ? generationFallbackReason
         : undefined,
     model: typeof model === "string" ? model : undefined,
+    provider: typeof resultSummary?.provider === "string" ? resultSummary.provider : undefined,
   };
 }
 

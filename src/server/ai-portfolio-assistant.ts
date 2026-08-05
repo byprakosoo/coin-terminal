@@ -1,8 +1,10 @@
 import "server-only";
 import { calculatePortfolio, calculateSpending } from "@/lib/calculations";
 import type { AssistantContext, AssistantReply } from "@/lib/assistant";
+import type { AiModelProvider } from "@/lib/ai-models";
 import { monthKey } from "@/lib/format";
 import type { AssistantFallbackReason, AssistantGenerationMode } from "@/lib/types";
+import type { ActiveAiModelConfig } from "@/server/ai-models";
 
 const defaultGatewayModel = "openai/gpt-5.6-luna";
 const defaultOpenAiModel = "gpt-5.6";
@@ -23,12 +25,15 @@ interface ModelResponse {
     type?: string;
     content?: Array<{ type?: string; text?: string }>;
   }>;
+  content?: Array<{ type?: string; text?: string }>;
+  choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
 }
 
 export interface AssistantGeneration {
   reply: AssistantReply;
   mode: AssistantGenerationMode;
   model?: string;
+  provider?: string;
   fallbackReason?: AssistantFallbackReason;
 }
 
@@ -37,6 +42,8 @@ interface ModelProvider {
   token: string;
   model: string;
   url: string;
+  provider?: string;
+  providerType?: AiModelProvider;
 }
 
 interface GenerateAssistantAnswerInput {
@@ -48,6 +55,7 @@ interface GenerateAssistantAnswerInput {
   gatewayModel?: string;
   apiKey?: string;
   model?: string;
+  customConfig?: ActiveAiModelConfig;
   fetcher?: typeof fetch;
 }
 
@@ -77,6 +85,7 @@ export async function generateAssistantAnswer(
         reply: { ...input.groundedReply, content: result.content },
         mode: provider.mode,
         model: provider.model,
+        provider: provider.provider,
       };
     }
     fallbackReason = result.fallbackReason;
@@ -90,11 +99,21 @@ export async function generateAssistantAnswer(
 }
 
 function resolveModelProviders(input: GenerateAssistantAnswerInput): ModelProvider[] {
+  if (input.customConfig) {
+    return [{
+      mode: "CUSTOM_AI",
+      token: input.customConfig.apiKey,
+      model: input.customConfig.model,
+      url: input.customConfig.endpointUrl,
+      provider: input.customConfig.label,
+      providerType: input.customConfig.provider,
+    }];
+  }
   const gatewayToken = input.gatewayToken ??
     process.env.AI_GATEWAY_API_KEY?.trim() ??
     process.env.VERCEL_OIDC_TOKEN?.trim();
   const openAiKey = input.apiKey ?? process.env.OPENAI_API_KEY?.trim();
-  return [
+  const providers: Array<ModelProvider | undefined> = [
     gatewayToken
       ? {
           mode: "VERCEL_AI_GATEWAY" as const,
@@ -104,6 +123,7 @@ function resolveModelProviders(input: GenerateAssistantAnswerInput): ModelProvid
             process.env.AI_GATEWAY_MODEL?.trim() ??
             defaultGatewayModel,
           url: gatewayUrl,
+          provider: "Vercel AI Gateway",
         }
       : undefined,
     openAiKey
@@ -112,9 +132,12 @@ function resolveModelProviders(input: GenerateAssistantAnswerInput): ModelProvid
           token: openAiKey,
           model: input.model ?? (process.env.OPENAI_MODEL?.trim() || defaultOpenAiModel),
           url: openAiUrl,
+          provider: "OpenAI",
+          providerType: "OPENAI",
         }
       : undefined,
-  ].filter((provider): provider is ModelProvider => Boolean(provider));
+  ];
+  return providers.filter((provider): provider is ModelProvider => Boolean(provider));
 }
 
 async function requestModel(
@@ -128,13 +151,28 @@ async function requestModel(
     const response = await fetcher(provider.url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${provider.token}`,
+        ...(provider.providerType === "ANTHROPIC"
+          ? {
+              "x-api-key": provider.token,
+              "anthropic-version": "2023-06-01",
+            }
+          : { authorization: `Bearer ${provider.token}` }),
         "content-type": "application/json",
       },
       body: JSON.stringify(
-        provider.mode === "VERCEL_AI_GATEWAY"
+        provider.providerType === "ANTHROPIC"
           ? {
               model: provider.model,
+              max_tokens: 700,
+              system: assistantInstructions,
+              messages: [{ role: "user", content: JSON.stringify(modelContext) }],
+            }
+          : provider.mode === "VERCEL_AI_GATEWAY" ||
+              provider.mode === "OPENAI" ||
+              provider.providerType === "OPENAI"
+          ? {
+              model: provider.model,
+              ...(provider.providerType === "OPENAI" ? { store: false } : {}),
               max_output_tokens: 700,
               input: [
                 { type: "message", role: "developer", content: assistantInstructions },
@@ -143,10 +181,11 @@ async function requestModel(
             }
           : {
               model: provider.model,
-              store: false,
-              max_output_tokens: 700,
-              instructions: assistantInstructions,
-              input: JSON.stringify(modelContext),
+              max_tokens: 700,
+              messages: [
+                { role: "system", content: assistantInstructions },
+                { role: "user", content: JSON.stringify(modelContext) },
+              ],
             },
       ),
       signal: controller.signal,
@@ -289,6 +328,19 @@ export function buildPortfolioModelContext(input: {
 
 export function extractResponseText(payload: ModelResponse) {
   if (payload.output_text?.trim()) return payload.output_text.trim();
+  if (payload.content?.length) {
+    return payload.content
+      .filter((item) => item.type === "text" && item.text)
+      .map((item) => item.text!.trim())
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  const chatContent = payload.choices?.[0]?.message?.content;
+  if (typeof chatContent === "string" && chatContent.trim()) return chatContent.trim();
+  if (Array.isArray(chatContent)) {
+    const text = chatContent.map((item) => item.text?.trim()).filter(Boolean).join("\n\n");
+    if (text) return text;
+  }
   return payload.output
     ?.flatMap((item) => item.content ?? [])
     .filter((item) => item.type === "output_text" && item.text)

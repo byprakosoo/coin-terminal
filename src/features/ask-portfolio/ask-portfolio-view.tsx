@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Bot, ChevronRight, CircleHelp, Database, Ellipsis, MessageSquarePlus, PanelLeft, Send, ShieldCheck, Sparkles, Trash2, UserRound, Wrench } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bot, Check, ChevronRight, CircleHelp, Database, Ellipsis, KeyRound, MessageSquarePlus, PanelLeft, Plus, Send, Settings2, ShieldCheck, Sparkles, Trash2, UserRound, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { AI_MODEL_PRESETS, aiModelProviderLabel } from "@/lib/ai-models";
+import type { AiModelConfigInput, AiModelConfigSummary, AiModelProvider } from "@/lib/ai-models";
+import { apiRequest, jsonBody } from "@/lib/api-client";
 import { PageHeader } from "@/components/page-header";
 import { EvidenceBadge, FreshnessBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, relativeTime } from "@/lib/utils";
 import { useTerminalStore } from "@/store/terminal-store";
@@ -33,18 +39,53 @@ export function AskPortfolioView() {
   const [deleteId, setDeleteId] = useState<string | undefined>();
   const [mobileThreads, setMobileThreads] = useState(false);
   const [sending, setSending] = useState(false);
+  const [modelConfigs, setModelConfigs] = useState<AiModelConfigSummary[]>([]);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelError, setModelError] = useState("");
+  const [modelForm, setModelForm] = useState<AiModelConfigInput>(newModelForm());
   const bottomRef = useRef<HTMLDivElement>(null);
   const effectiveActiveId = activeId ?? conversations[0]?.id;
   const activeMessages = messages.filter((message) => message.conversationId === effectiveActiveId);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeMessages.length]);
+  const loadModelConfigs = useCallback(async () => {
+    const result = await apiRequest<AiModelConfigSummary[]>("/api/ai-models");
+    setModelConfigs(result);
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadModelConfigs().catch(() => undefined); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadModelConfigs]);
 
   const handleNew = async () => { try { const id = await newConversation(); setActiveId(id); setMobileThreads(false); } catch (error) { toast.error("Conversation could not be created", { description: error instanceof Error ? error.message : undefined }); } };
   const submit = async (text = draft) => { const clean = text.trim(); if (!clean || sending) return; setSending(true); setDraft(""); try { const id = await sendMessage(effectiveActiveId, clean); setActiveId(id); } catch (error) { setDraft(clean); toast.error("Message could not be sent", { description: error instanceof Error ? error.message : undefined }); } finally { setSending(false); } };
   const remove = async () => { if (!deleteId) return; try { await deleteConversation(deleteId); if (effectiveActiveId === deleteId) setActiveId(conversations.find((item) => item.id !== deleteId)?.id); setDeleteId(undefined); toast.success("Conversation deleted", { description: "Messages and tool receipts are no longer available." }); } catch (error) { toast.error("Conversation could not be deleted", { description: error instanceof Error ? error.message : undefined }); } };
+  const activeConfig = modelConfigs.find((config) => config.active);
+  const openNewModel = () => { setModelForm(newModelForm()); setModelError(""); setModelDialogOpen(true); };
+  const editModel = (config: AiModelConfigSummary) => { setModelForm({ id: config.id, label: config.label, provider: config.provider, model: config.model, endpointUrl: config.endpointUrl }); setModelError(""); setModelDialogOpen(true); };
+  const saveModel = async () => {
+    setModelSaving(true);
+    setModelError("");
+    try {
+      await apiRequest<AiModelConfigSummary>("/api/ai-models", { method: "POST", body: jsonBody(modelForm) });
+      await loadModelConfigs();
+      setModelDialogOpen(false);
+      toast.success("AI model saved", { description: "Future Ask Portfolio questions will use this model." });
+    } catch (error) {
+      setModelError(error instanceof Error ? error.message : "The AI model could not be saved.");
+    } finally { setModelSaving(false); }
+  };
+  const activateModel = async (id: string, active: boolean) => {
+    try { await apiRequest<AiModelConfigSummary[]>(`/api/ai-models/${id}`, { method: "PATCH", body: jsonBody({ active }) }); await loadModelConfigs(); } catch (error) { toast.error("AI model could not be changed", { description: error instanceof Error ? error.message : undefined }); }
+  };
+  const deleteModel = async (id: string, label: string) => {
+    if (!window.confirm(`Remove the saved ${label} model and its encrypted API key?`)) return;
+    try { await apiRequest<void>(`/api/ai-models/${id}`, { method: "DELETE" }); await loadModelConfigs(); toast.success("AI model removed"); } catch (error) { toast.error("AI model could not be removed", { description: error instanceof Error ? error.message : undefined }); }
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Grounded AI assistant" title="Ask Portfolio" description="Ask open-ended questions about the same portfolio, spending, signal, and wallet records shown across the terminal; model synthesis fails safely to deterministic selectors." actions={<><Badge variant="success"><ShieldCheck />Grounded context</Badge><Button size="sm" onClick={() => void handleNew()}><MessageSquarePlus />New conversation</Button></>} />
+      <PageHeader eyebrow="Grounded AI assistant" title="Ask Portfolio" description="Ask open-ended questions about the same portfolio, spending, signal, and wallet records shown across the terminal; model synthesis fails safely to deterministic selectors." actions={<div className="flex flex-wrap items-center justify-end gap-2"><Badge variant="success"><ShieldCheck />Grounded context</Badge><Select value={activeConfig?.id ?? "server-fallback"} onValueChange={(value) => { if (value !== "server-fallback") void activateModel(value, true); else if (activeConfig) void activateModel(activeConfig.id, false); }}><SelectTrigger className="h-9 w-[12rem] text-xs" aria-label="Active AI model"><SelectValue placeholder="Server fallback" /></SelectTrigger><SelectContent><SelectItem value="server-fallback">Server fallback</SelectItem>{modelConfigs.map((config) => <SelectItem key={config.id} value={config.id}>{config.label} · {config.model}</SelectItem>)}</SelectContent></Select><Button variant="outline" size="sm" onClick={openNewModel}><Settings2 />AI models</Button><Button size="sm" onClick={() => void handleNew()}><MessageSquarePlus />New conversation</Button></div>} />
       <Card className="relative h-[calc(100vh-15.75rem)] min-h-[620px] overflow-hidden">
         <div className="grid h-full min-h-0 md:grid-cols-[260px_1fr] xl:grid-cols-[300px_1fr]">
           <aside className={cn("border-r bg-background/35", mobileThreads ? "absolute inset-x-4 z-20 mt-14 h-[calc(100%-8rem)] rounded-lg border shadow-2xl md:static md:mt-0 md:h-auto md:rounded-none md:border-y-0 md:border-l-0 md:shadow-none" : "hidden md:block")}>
@@ -64,8 +105,13 @@ export function AskPortfolioView() {
         </div>
       </Card>
       <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(undefined)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Delete conversation?</DialogTitle><DialogDescription>The conversation, messages, and tool receipts will no longer be available in your workspace.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setDeleteId(undefined)}>Cancel</Button><Button variant="destructive" onClick={() => void remove()}><Trash2 />Delete conversation</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>AI model connections</DialogTitle><DialogDescription>Save provider keys server-side, then choose which model answers new questions. Keys are encrypted and never shown again.</DialogDescription></DialogHeader><div className="space-y-5"><div className="space-y-2">{modelConfigs.map((config) => <div key={config.id} className={cn("flex flex-wrap items-center gap-3 rounded-lg border p-3", config.active && "border-primary/35 bg-primary/[0.04]")}><div className="flex min-w-0 flex-1 items-center gap-2"><span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md border", config.active ? "border-success/30 bg-success/10 text-success" : "bg-secondary text-muted-foreground")}>{config.active ? <Check className="size-4" /> : <Bot className="size-4" />}</span><div className="min-w-0"><p className="truncate text-xs font-medium">{config.label} · {config.model}</p><p className="mt-1 truncate text-[10px] text-muted-foreground">{aiModelProviderLabel(config.provider)} · key ending in {config.apiKeyHint}</p></div></div><div className="flex items-center gap-1"><Button variant="ghost" size="sm" onClick={() => editModel(config)}>Edit</Button>{!config.active && <Button variant="outline" size="sm" onClick={() => void activateModel(config.id, true)}>Use</Button>}<Button variant="ghost" size="icon-sm" onClick={() => void deleteModel(config.id, config.label)} aria-label={`Remove ${config.label}`}><Trash2 /></Button></div></div>)}{!modelConfigs.length && <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">No saved model yet. Add one below; until then the server fallback remains active.</div>}</div><div className="border-t pt-5"><div className="mb-4 flex items-center justify-between"><div><p className="text-sm font-medium">{modelForm.id ? "Edit model" : "Add model"}</p><p className="mt-1 text-xs text-muted-foreground">Your key is sent only to the authenticated backend.</p></div><Button variant="ghost" size="sm" onClick={openNewModel}><Plus />New</Button></div><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Provider</Label><Select value={modelForm.provider} onValueChange={(value) => { const provider = value as AiModelProvider; setModelForm((current) => ({ ...current, provider, endpointUrl: AI_MODEL_PRESETS[provider].endpointUrl, model: current.model || AI_MODEL_PRESETS[provider].modelPlaceholder })); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(AI_MODEL_PRESETS) as AiModelProvider[]).map((provider) => <SelectItem key={provider} value={provider}>{AI_MODEL_PRESETS[provider].label}</SelectItem>)}</SelectContent></Select><p className="text-[10px] text-muted-foreground">{AI_MODEL_PRESETS[modelForm.provider].help}</p></div><div className="space-y-2"><Label htmlFor="ai-model-label">Name</Label><Input id="ai-model-label" value={modelForm.label} onChange={(event) => setModelForm((current) => ({ ...current, label: event.target.value }))} placeholder="My Claude" /></div><div className="space-y-2 sm:col-span-2"><Label htmlFor="ai-model-name">Model ID</Label><Input id="ai-model-name" value={modelForm.model} onChange={(event) => setModelForm((current) => ({ ...current, model: event.target.value }))} placeholder={AI_MODEL_PRESETS[modelForm.provider].modelPlaceholder} /></div>{modelForm.provider === "OPENAI_COMPATIBLE" && <div className="space-y-2 sm:col-span-2"><Label htmlFor="ai-model-endpoint">HTTPS endpoint</Label><Input id="ai-model-endpoint" value={modelForm.endpointUrl ?? ""} onChange={(event) => setModelForm((current) => ({ ...current, endpointUrl: event.target.value }))} placeholder="https://your-provider.example/v1/chat/completions" /><p className="text-[10px] text-muted-foreground">Must be a public HTTPS Chat Completions endpoint. Local/private URLs are blocked.</p></div>}<div className="space-y-2 sm:col-span-2"><Label htmlFor="ai-model-key">API key</Label><div className="relative"><KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input id="ai-model-key" type="password" className="pl-9" value={modelForm.apiKey ?? ""} onChange={(event) => setModelForm((current) => ({ ...current, apiKey: event.target.value }))} placeholder={modelForm.id ? "Leave blank to keep the saved key" : "Paste your provider API key"} autoComplete="new-password" /></div></div></div>{modelError && <p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">{modelError}</p>}</div></div><DialogFooter><Button variant="ghost" onClick={() => setModelDialogOpen(false)}>Cancel</Button><Button onClick={() => void saveModel()} disabled={modelSaving || !modelForm.label.trim() || !modelForm.model.trim() || (!modelForm.id && !modelForm.apiKey?.trim())}>{modelSaving ? "Saving…" : "Save & use model"}<Check /></Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
+}
+
+function newModelForm(provider: AiModelProvider = "OPENAI"): AiModelConfigInput {
+  return { label: "My OpenAI", provider, model: "", endpointUrl: AI_MODEL_PRESETS[provider].endpointUrl, apiKey: "" };
 }
 
 function ConversationRow({ conversation, active, onSelect, onDelete }: { conversation: ReturnType<typeof useTerminalStore.getState>["conversations"][number]; active: boolean; onSelect: () => void; onDelete: () => void }) {
@@ -76,11 +122,13 @@ function EmptyChat({ onSuggestion }: { onSuggestion: (value: string) => void }) 
 
 function MessageBubble({ message }: { message: ReturnType<typeof useTerminalStore.getState>["messages"][number] }) {
   const assistant = message.role === "ASSISTANT";
-  const modelGenerated = message.generationMode === "VERCEL_AI_GATEWAY" || message.generationMode === "OPENAI";
+  const modelGenerated = message.generationMode === "VERCEL_AI_GATEWAY" || message.generationMode === "OPENAI" || message.generationMode === "CUSTOM_AI";
   const generationLabel = message.generationMode === "VERCEL_AI_GATEWAY"
     ? `AI Gateway · ${message.model ?? "model"}`
     : message.generationMode === "OPENAI"
       ? message.model ?? "OpenAI model"
+      : message.generationMode === "CUSTOM_AI"
+        ? `${message.provider ?? "Custom AI"} · ${message.model ?? "model"}`
       : fallbackGenerationLabel(message.generationFallbackReason);
   return <div className={cn("flex gap-3", !assistant && "justify-end")}>
     {assistant && <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary"><Bot className="size-4" /></span>}

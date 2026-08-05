@@ -72,6 +72,66 @@ describe("AI portfolio assistant", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("uses an encrypted-user-configured Anthropic model through the Messages API shape", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, request?: RequestInit) => {
+      expect(new Headers(request?.headers).get("x-api-key")).toBe("claude-key");
+      expect(new Headers(request?.headers).get("anthropic-version")).toBe("2023-06-01");
+      const body = JSON.parse(String(request?.body)) as { model: string; messages: unknown[] };
+      expect(body.model).toBe("claude-test");
+      expect(body.messages).toHaveLength(1);
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Claude answer." }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      customConfig: {
+        label: "My Claude",
+        provider: "ANTHROPIC",
+        model: "claude-test",
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        apiKey: "claude-key",
+      },
+      fetcher,
+    });
+
+    expect(result.mode).toBe("CUSTOM_AI");
+    expect(result.provider).toBe("My Claude");
+    expect(result.reply.content).toBe("Claude answer.");
+  });
+
+  it("uses Kimi and other OpenAI-compatible models through chat completions", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, request?: RequestInit) => {
+      const body = JSON.parse(String(request?.body)) as { model: string; messages: unknown[] };
+      expect(body.model).toBe("kimi-test");
+      expect(body.messages).toHaveLength(2);
+      return new Response(JSON.stringify({ choices: [{ message: { content: "Kimi answer." } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      customConfig: {
+        label: "My Kimi",
+        provider: "KIMI",
+        model: "kimi-test",
+        endpointUrl: "https://api.moonshot.ai/v1/chat/completions",
+        apiKey: "kimi-key",
+      },
+      fetcher,
+    });
+
+    expect(result.mode).toBe("CUSTOM_AI");
+    expect(result.provider).toBe("My Kimi");
+    expect(result.reply.content).toBe("Kimi answer.");
+  });
+
   it("prefers Vercel AI Gateway and sends developer rules separately from data", async () => {
     const fetcher = vi.fn(async (url: string | URL | Request, request?: RequestInit) => {
       void url;

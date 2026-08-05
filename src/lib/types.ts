@@ -292,6 +292,7 @@ export interface SourceReceipt {
 export type AssistantGenerationMode =
   | "VERCEL_AI_GATEWAY"
   | "OPENAI"
+  | "CUSTOM_AI"
   | "DETERMINISTIC";
 
 export type AssistantFallbackReason =
@@ -315,6 +316,7 @@ export interface AssistantMessage {
   generationMode?: AssistantGenerationMode;
   generationFallbackReason?: AssistantFallbackReason;
   model?: string;
+  provider?: string;
 }
 
 export interface Conversation {
