@@ -78,6 +78,13 @@
       "when": 1785912770595,
       "tag": "0010_lethal_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1785924905721,
+      "tag": "0012_special_power_pack",
+      "breakpoints": true
     }
   ]
 }

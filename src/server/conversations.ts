@@ -3,6 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { aiConversations, aiMessages, aiToolCalls } from "@/db/schema";
 import { buildAssistantReply } from "@/lib/assistant";
+import type { AssistantValidationOutcome, AssistantWebMode } from "@/lib/types";
 import { getActiveAiModelConfig } from "@/server/ai-models";
 import { generateAssistantAnswer } from "@/server/ai-portfolio-assistant";
 import { ApiError } from "@/server/api";
@@ -60,7 +61,7 @@ export async function sendConversationMessage(
   conversationId: string,
   content: string,
 ) {
-  await requireConversation(userId, conversationId);
+  const conversation = await requireConversation(userId, conversationId);
   const [workspace, portfolioRecap, strategyProfile] = await Promise.all([
     loadWorkspace(userId),
     getPortfolioRecap(userId),
@@ -72,11 +73,13 @@ export async function sendConversationMessage(
     .where(eq(aiMessages.conversationId, conversationId))
     .orderBy(desc(aiMessages.createdAt))
     .limit(8);
+  const conversationHistory = historyRows.reverse();
   const assistantContext = {
     ...workspace,
     displayCurrency: workspace.profile.displayCurrency,
     portfolioRecap,
     strategyProfile,
+    conversationHistory,
   };
   const customConfig = await getActiveAiModelConfig(userId);
   const groundedReply = buildAssistantReply(content, assistantContext);
@@ -84,8 +87,9 @@ export async function sendConversationMessage(
     question: content,
     context: assistantContext,
     groundedReply,
-    history: historyRows.reverse(),
+    history: conversationHistory,
     customConfig,
+    conversationState: conversation.contextState ?? undefined,
   });
   const reply = generation.reply;
   const userMessageId = createId();
@@ -137,11 +141,16 @@ export async function sendConversationMessage(
         model: generation.model,
         provider: generation.provider,
         fallbackReason: generation.fallbackReason,
+        toolsUsed: generation.toolsUsed,
+        webMode: generation.webMode,
+        evidenceCoverage: generation.evidenceCoverage,
+        latencyMs: generation.latencyMs,
+        validationOutcome: generation.validationOutcome,
       },
     });
     await tx
       .update(aiConversations)
-      .set({ title, updatedAt: now })
+      .set({ title, updatedAt: now, contextState: generation.contextState })
       .where(and(eq(aiConversations.id, conversationId), eq(aiConversations.userId, userId)));
   });
 
@@ -167,13 +176,18 @@ export async function sendConversationMessage(
       generationFallbackReason: generation.fallbackReason,
       model: generation.model,
       provider: generation.provider,
+      toolsUsed: generation.toolsUsed,
+      webMode: generation.webMode,
+      evidenceCoverage: generation.evidenceCoverage,
+      latencyMs: generation.latencyMs,
+      validationOutcome: generation.validationOutcome,
     },
   };
 }
 
 async function requireConversation(userId: string, conversationId: string) {
   const [conversation] = await db
-    .select({ id: aiConversations.id })
+    .select({ id: aiConversations.id, contextState: aiConversations.contextState })
     .from(aiConversations)
     .where(
       and(
@@ -184,6 +198,7 @@ async function requireConversation(userId: string, conversationId: string) {
     )
     .limit(1);
   if (!conversation) throw new ApiError(404, "Conversation not found.", "NOT_FOUND");
+  return conversation;
 }
 
 function affectedRows(result: unknown) {
@@ -210,9 +225,17 @@ function generationMetadata(resultSummary: Record<string, unknown> | null | unde
       generationFallbackReason === "PROVIDER_RATE_LIMIT" ||
       generationFallbackReason === "PROVIDER_ERROR" ||
       generationFallbackReason === "EMPTY_RESPONSE" ||
-      generationFallbackReason === "UNSAFE_RESPONSE"
+      generationFallbackReason === "UNSAFE_RESPONSE" ||
+      generationFallbackReason === "PLANNER_ERROR" ||
+      generationFallbackReason === "SAFETY_REWRITE_FAILED" ||
+      generationFallbackReason === "WEB_UNAVAILABLE"
         ? generationFallbackReason
         : undefined,
+    toolsUsed: Array.isArray(resultSummary?.toolsUsed) ? resultSummary.toolsUsed as string[] : undefined,
+    webMode: resultSummary?.webMode as AssistantWebMode | undefined,
+    evidenceCoverage: typeof resultSummary?.evidenceCoverage === "number" ? resultSummary.evidenceCoverage : undefined,
+    latencyMs: typeof resultSummary?.latencyMs === "number" ? resultSummary.latencyMs : undefined,
+    validationOutcome: resultSummary?.validationOutcome as AssistantValidationOutcome | undefined,
     model: typeof model === "string" ? model : undefined,
     provider: typeof resultSummary?.provider === "string" ? resultSummary.provider : undefined,
   };

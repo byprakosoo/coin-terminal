@@ -681,6 +681,7 @@ export const signalEvidence = mysqlTable(
       "INFERRED",
       "UNVERIFIED",
       "STALE",
+      "WEB_PUBLIC",
     ]).notNull(),
     details: json("details").$type<Record<string, unknown>>(),
   },
@@ -850,6 +851,15 @@ export const aiConversations = mysqlTable(
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`)
       .$onUpdate(() => new Date()),
+    contextState: json("context_state").$type<{
+      summary: string;
+      activeAssets: string[];
+      activePeriod?: string;
+      cashMention?: string;
+      assumptions: string[];
+      unresolvedReferences: string[];
+      updatedAt: string;
+    }>(),
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [index("ai_conversations_user_updated_idx").on(table.userId, table.updatedAt)],

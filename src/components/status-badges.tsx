@@ -24,9 +24,10 @@ export function EvidenceBadge({ value }: { value: EvidenceKind }) {
     INFERRED: ShieldQuestion,
     UNVERIFIED: AlertTriangle,
     STALE: TimerOff,
+    WEB_PUBLIC: Radio,
   };
   const Icon = icons[value];
-  const variant = value === "OBSERVED" ? "success" : value === "CALCULATED" ? "info" : value === "INFERRED" ? "warning" : "risk";
+  const variant = value === "OBSERVED" || value === "WEB_PUBLIC" ? "success" : value === "CALCULATED" ? "info" : value === "INFERRED" ? "warning" : "risk";
   return <Badge variant={variant}><Icon />{value}</Badge>;
 }
 

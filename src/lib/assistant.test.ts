@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildAssistantReply } from "@/lib/assistant";
 import { defensiveRuleVersion } from "@/lib/btc-defensive-strategy";
 import { btcResearchRuleVersion } from "@/lib/btc-research-rule";
@@ -56,6 +56,15 @@ function currentResearchSignal({
 }
 
 describe("buildAssistantReply", () => {
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-10T12:00:00.000Z"));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it("routes BTC questions to the signal explanation tool", () => {
     const reply = buildAssistantReply("Why is BTC currently WATCH?", context);
     expect(reply.toolName).toBe("getBtcSignalExplanation");

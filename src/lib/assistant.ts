@@ -34,6 +34,7 @@ export interface AssistantContext {
   alerts?: Alert[];
   portfolioRecap?: PortfolioRecapSummary;
   strategyProfile?: BtcStrategyProfile;
+  conversationHistory?: Array<{ role: "USER" | "ASSISTANT"; content: string }>;
 }
 
 export interface AssistantReply {
@@ -41,6 +42,28 @@ export interface AssistantReply {
   toolName: AssistantToolName;
   sources: SourceReceipt[];
   investmentRelated: boolean;
+}
+
+export type AssistantQuestionIntent = "KEY_ACTION" | "TOTAL_PORTFOLIO_VALUE" | "GENERAL";
+
+export function classifyAssistantQuestion(question: string, previousUserQuestion?: string): AssistantQuestionIntent {
+  const normalized = question.toLowerCase();
+  const current = classifyCurrentQuestion(normalized);
+  if (current !== "GENERAL") return current;
+  if (previousUserQuestion && /^(?:and|so|then|what|how)\b|\b(?:it|that|this|those|they|there|also)\b/.test(normalized)) {
+    return classifyCurrentQuestion(previousUserQuestion.toLowerCase());
+  }
+  return "GENERAL";
+}
+
+function classifyCurrentQuestion(normalized: string): AssistantQuestionIntent {
+  if (/key action|next action|next step|what should i do|what do i do|how should i use|what should .*\b(?:cash|money)\b|\b(?:cash|money)\b.*\b(?:do|use|invest)\b/.test(normalized)) {
+    return "KEY_ACTION";
+  }
+  if (/total (?:portfolio )?(?:value|worth)|portfolio value|net worth|all assets|entire portfolio/.test(normalized)) {
+    return "TOTAL_PORTFOLIO_VALUE";
+  }
+  return "GENERAL";
 }
 
 function receipt(
@@ -86,8 +109,43 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     holding.name.toLowerCase() === requestedAsset?.toLowerCase(),
   );
   const btcSignalIntent = /signal|defensive|model target|target allocation|shadow|validated|\bwatch\b|research verdict|buy or sell|should i (?:buy|sell)|\bentry\b|\bexit\b|outlook|momentum|\brsi\b|technical trend/.test(normalized);
+  const previousUserQuestion = context.conversationHistory?.filter((turn) => turn.role === "USER").at(-1)?.content;
+  const questionIntent = classifyAssistantQuestion(question, previousUserQuestion);
 
-  if (/total (?:portfolio )?(?:value|worth)|portfolio value|net worth|all assets|entire portfolio/.test(normalized)) {
+  if (questionIntent === "KEY_ACTION") {
+    const cashMention = question.match(/\$\s?\d+(?:\.\d+)?/)?.[0]
+      ?? previousUserQuestion?.match(/\$\s?\d+(?:\.\d+)?/)?.[0]
+      ?? "the stated cash";
+    const latestSnapshot = context.portfolioRecap?.snapshots.at(-1);
+    const qualityIssues = [
+      portfolio.holdings.some((holding) => holding.incompleteBasis)
+        ? "reconcile incomplete acquisition basis before relying on P&L"
+        : undefined,
+      context.prices.some((price) => price.freshness !== "FRESH")
+        ? "refresh delayed or stale market prices"
+        : undefined,
+      !latestSnapshot
+        ? "add an all-assets Monthly History snapshot"
+        : undefined,
+    ].filter((item): item is string => Boolean(item));
+    const firstAction = latestSnapshot
+      ? `First, reconcile whether ${cashMention} is already included in the Bank/cash line of your latest Monthly History snapshot dated ${latestSnapshot.asOfDate}.`
+      : `First, record whether ${cashMention} belongs to your cash reserve or investable balance; there is no all-assets Monthly History snapshot to reconcile it against yet.`;
+    const dataAction = qualityIssues.length
+      ? `Then ${qualityIssues.join(", then ")}.`
+      : "The current data scan does not flag an incomplete crypto basis or missing market price.";
+    return {
+      content: `${firstAction} ${dataAction} For the money decision, the account does not store your emergency-fund target, time horizon, or risk limit, so I cannot defensibly turn ${cashMention} into a buy, sell, or allocation instruction. Treat it as an explicit decision gate: confirm the cash reserve and risk constraints first, then compare any proposed allocation against the portfolio's recorded exposure. Ask Portfolio is read-only and will not move or invest the money for you.`,
+      toolName: "getDataQualityReport",
+      sources: [
+        receipt("Authenticated portfolio ledger quality scan", latestPrice, "CALCULATED", marketFreshness),
+        ...(latestSnapshot ? [receipt("Monthly History cash reconciliation", latestSnapshot.asOfDate, "OBSERVED", "FRESH", `All-assets snapshot as of ${latestSnapshot.asOfDate}`)] : []),
+      ],
+      investmentRelated: true,
+    };
+  }
+
+  if (questionIntent === "TOTAL_PORTFOLIO_VALUE") {
     const latestSnapshot = context.portfolioRecap?.snapshots.at(-1);
     const latestSummary = context.portfolioRecap?.latestSummary;
     if (!latestSnapshot || !latestSummary) {

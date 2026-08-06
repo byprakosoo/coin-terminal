@@ -1,0 +1,2 @@
+ALTER TABLE `signal_evidence` MODIFY COLUMN `evidence_kind` enum('OBSERVED','CALCULATED','INFERRED','UNVERIFIED','STALE','WEB_PUBLIC') NOT NULL;--> statement-breakpoint
+ALTER TABLE `ai_conversations` ADD `context_state` json;

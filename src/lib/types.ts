@@ -7,7 +7,8 @@ export type EvidenceKind =
   | "CALCULATED"
   | "INFERRED"
   | "UNVERIFIED"
-  | "STALE";
+  | "STALE"
+  | "WEB_PUBLIC";
 
 export type TransactionType =
   | "BUY"
@@ -287,7 +288,23 @@ export interface SourceReceipt {
   freshness: Freshness;
   observedAt: string;
   kind: EvidenceKind;
+  url?: string;
+  publishedAt?: string;
+  retrievedAt?: string;
 }
+
+export interface ConversationContextState {
+  summary: string;
+  activeAssets: string[];
+  activePeriod?: string;
+  cashMention?: string;
+  assumptions: string[];
+  unresolvedReferences: string[];
+  updatedAt: string;
+}
+
+export type AssistantWebMode = "NONE" | "NATIVE" | "CURATED" | "UNAVAILABLE";
+export type AssistantValidationOutcome = "PASSED" | "REWRITTEN" | "REJECTED";
 
 export type AssistantGenerationMode =
   | "VERCEL_AI_GATEWAY"
@@ -302,7 +319,10 @@ export type AssistantFallbackReason =
   | "PROVIDER_RATE_LIMIT"
   | "PROVIDER_ERROR"
   | "EMPTY_RESPONSE"
-  | "UNSAFE_RESPONSE";
+  | "UNSAFE_RESPONSE"
+  | "PLANNER_ERROR"
+  | "SAFETY_REWRITE_FAILED"
+  | "WEB_UNAVAILABLE";
 
 export interface AssistantMessage {
   id: string;
@@ -317,6 +337,11 @@ export interface AssistantMessage {
   generationFallbackReason?: AssistantFallbackReason;
   model?: string;
   provider?: string;
+  toolsUsed?: AssistantToolName[];
+  webMode?: AssistantWebMode;
+  evidenceCoverage?: number;
+  latencyMs?: number;
+  validationOutcome?: AssistantValidationOutcome;
 }
 
 export interface Conversation {

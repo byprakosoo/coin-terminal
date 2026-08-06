@@ -5,6 +5,7 @@ import {
   buildPortfolioModelContext,
   extractResponseText,
   generateAssistantAnswer,
+  validateModelResponse,
 } from "@/server/ai-portfolio-assistant";
 
 const seed = createDemoData(new Date("2026-07-10T12:00:00.000Z").getTime());
@@ -47,6 +48,19 @@ describe("AI portfolio assistant", () => {
     expect(modelContext.instructionsForDataUse).toContain("full-dataset aggregates");
   });
 
+  it("does not turn an arbitrary question into the deterministic portfolio summary", () => {
+    const question = "How did my portfolio change compared with last year?";
+    const modelContext = buildPortfolioModelContext({
+      question,
+      context,
+      groundedReply: buildAssistantReply(question, context),
+    });
+
+    expect(modelContext.questionIntent).toBe("GENERAL");
+    expect(modelContext.deterministicSelector.answer).toBeUndefined();
+    expect(modelContext.deterministicSelector.relevance).toContain("exact question");
+  });
+
   it("uses the latest all-assets Monthly History snapshot for total portfolio value", () => {
     const reply = buildAssistantReply("What is my total portfolio value today?", {
       ...context,
@@ -72,6 +86,66 @@ describe("AI portfolio assistant", () => {
     expect(reply.content).toContain("2026-07-31");
     expect(reply.content).toContain("Monthly History");
     expect(reply.content).not.toContain("crypto ledger alone");
+  });
+
+  it("routes cash and key-action questions to an action answer instead of portfolio total", () => {
+    const reply = buildAssistantReply(
+      "Please give a key action for my portfolio today and if I have $120 cash, what should I do with this money?",
+      {
+        ...context,
+        displayCurrency: "USD",
+        portfolioRecap: {
+          snapshots: [{
+            asOfDate: "2026-07-31",
+            bankIdr: "16000000",
+            rdpuIdr: "0",
+            ihsgIdr: "0",
+            sp500Idr: "0",
+            btcIdr: "10000000",
+            ethIdr: "0",
+            altcoinIdr: "0",
+            goldIdr: "0",
+            idrPerUsd: "16000",
+          }],
+          latestSummary: { totalIdr: "26000000" },
+        },
+      } as never,
+    );
+
+    expect(reply.toolName).toBe("getDataQualityReport");
+    expect(reply.content).toContain("$120");
+    expect(reply.content).toContain("reconcile");
+    expect(reply.content).not.toContain("Your total portfolio value");
+
+    const modelContext = buildPortfolioModelContext({
+      question: "Please give a key action for my portfolio today and if I have $120 cash, what should I do with this money?",
+      context,
+      groundedReply: reply,
+    });
+    expect(modelContext.questionIntent).toBe("KEY_ACTION");
+    expect(modelContext.deterministicSelector.answer).toContain("$120");
+  });
+
+  it("resolves a short follow-up against the previous user question", () => {
+    const previousQuestion = "Please give a key action for my portfolio today and if I have $120 cash, what should I do with this money?";
+    const followUp = "What about it?";
+    const followUpContext = {
+      ...context,
+      displayCurrency: "USD" as const,
+      conversationHistory: [{ role: "USER" as const, content: previousQuestion }],
+    };
+    const reply = buildAssistantReply(followUp, followUpContext);
+
+    expect(reply.toolName).toBe("getDataQualityReport");
+    expect(reply.content).toContain("$120");
+    const modelContext = buildPortfolioModelContext({
+      question: followUp,
+      context: followUpContext,
+      groundedReply: reply,
+      history: [{ role: "USER", content: previousQuestion }],
+    });
+    expect(modelContext.questionIntent).toBe("KEY_ACTION");
+    expect(modelContext.priorConversation).toEqual([{ role: "USER", content: previousQuestion }]);
   });
 
   it("uses deterministic output when an API key is not configured", async () => {
@@ -110,7 +184,7 @@ describe("AI portfolio assistant", () => {
     expect(result.mode).toBe("OPENAI");
     expect(result.reply.content).toBe("Grounded model answer.");
     expect(result.reply.sources).toEqual(groundedReply.sources);
-    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("uses an encrypted-user-configured Anthropic model through the Messages API shape", async () => {
@@ -186,7 +260,7 @@ describe("AI portfolio assistant", () => {
         input: Array<{ role: string }>;
       };
       expect(body.model).toBe("gpt-5.6-luna");
-      expect(body.instructions).toContain("Coin Terminal's grounded portfolio assistant");
+      expect(body.instructions).toContain("Coin Terminal");
       expect(body.input).toEqual([{ type: "message", role: "user", content: expect.any(String) }]);
       return new Response(JSON.stringify({ output_text: "Codex answer." }), {
         status: 200,
@@ -241,8 +315,7 @@ describe("AI portfolio assistant", () => {
     expect(result.mode).toBe("VERCEL_AI_GATEWAY");
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/responses");
     expect(body.model).toBe("openai/test-gateway-model");
-    expect(body.input[0].role).toBe("developer");
-    expect(body.input[1].role).toBe("user");
+    expect(body.input[0].role).toBe("user");
     expect(body.store).toBeUndefined();
   });
 
@@ -268,7 +341,7 @@ describe("AI portfolio assistant", () => {
     expect(result.mode).toBe("OPENAI");
     expect(result.model).toBe("direct-model");
     expect(result.reply.content).toBe("Direct fallback answer.");
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
   it("records Vercel customer verification as a billing setup fallback", async () => {
@@ -308,11 +381,73 @@ describe("AI portfolio assistant", () => {
     });
 
     expect(result.mode).toBe("DETERMINISTIC");
-    expect(result.fallbackReason).toBe("UNSAFE_RESPONSE");
+    expect(result.fallbackReason).toBe("SAFETY_REWRITE_FAILED");
     expect(result.reply).toEqual(groundedReply);
   });
 
   it("extracts the convenience output_text field", () => {
     expect(extractResponseText({ output_text: "  Answer  " })).toBe("Answer");
+  });
+
+  it("allows conditional nominal scenarios while rejecting execution and guarantees", () => {
+    expect(validateModelResponse("Option A: keep $120 as cash; Option B: conditionally allocate part after checking concentration and liquidity.")).toBe("PASSED");
+    expect(validateModelResponse("Execute a buy order for BTC now; returns are guaranteed.")).toBe("REJECTED");
+  });
+
+  it("runs a planner and native public web step without leaking private cash into the query", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, request?: RequestInit) => {
+      const body = JSON.parse(String(request?.body)) as { input?: Array<{ content?: string }>; tools?: unknown[] };
+      const content = body.input?.[0]?.content ?? "";
+      if (body.tools) {
+        expect(content).not.toContain("120");
+        expect(content).not.toContain("cash");
+        expect(content).not.toContain("portfolio");
+        expect(content).not.toContain("balance");
+        return new Response(JSON.stringify({ output_text: "BTC public market context: https://example.com/market" }), { status: 200 });
+      }
+      if (content.includes("availableAssets")) {
+        return new Response(JSON.stringify({ output_text: JSON.stringify({ intent: "RECOMMEND", assets: ["BTC"], tools: ["getPortfolioSummary", "getDataQualityReport"], needsWeb: true, webQueries: ["BTC latest market context for my portfolio with $120 balance"], answerGoal: "Give a conditional action for my $120 cash." }) }), { status: 200 });
+      }
+      expect(content).toContain("webEvidence");
+      return new Response(JSON.stringify({ output_text: "Keep the answer conditional and verify concentration before choosing a cash scenario." }), { status: 200 });
+    });
+    const result = await generateAssistantAnswer({
+      question: "Give me a key action and what should I do with my $120 cash?",
+      context,
+      groundedReply: buildAssistantReply("Give me a key action and what should I do with my $120 cash?", context),
+      apiKey: "test-key",
+      model: "gpt-5.6-luna",
+      fetcher,
+    });
+
+    expect(result.reply.content).toContain("conditional");
+    expect(result.webMode).toBe("NATIVE");
+    expect(result.validationOutcome).toBe("PASSED");
+    expect(result.toolsUsed).toContain("getPortfolioSummary");
+    expect(result.reply.sources.some((source) => source.kind === "WEB_PUBLIC")).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("falls back to a curated CoinGecko snapshot when native web search is unavailable", async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request, request?: RequestInit) => {
+      const body = JSON.parse(String(request?.body ?? "{}")) as { input?: Array<{ content?: string }>; tools?: unknown[] };
+      if (body.tools) return new Response("unsupported", { status: 400 });
+      if (String(url).includes("coingecko.com")) return new Response(JSON.stringify({ bitcoin: { usd: 100, usd_24h_change: 1.2 } }), { status: 200 });
+      const content = body.input?.[0]?.content ?? "";
+      if (content.includes("availableAssets")) return new Response(JSON.stringify({ output_text: JSON.stringify({ intent: "ANALYZE", assets: ["BTC"], tools: ["getAssetPerformance"], needsWeb: true, webQueries: ["BTC latest market context"], answerGoal: "Explain BTC market context." }) }), { status: 200 });
+      return new Response(JSON.stringify({ output_text: "BTC is up 1.20% in the curated public snapshot." }), { status: 200 });
+    });
+    const result = await generateAssistantAnswer({
+      question: "What is the latest BTC market context?",
+      context,
+      groundedReply: buildAssistantReply("What is the latest BTC market context?", context),
+      apiKey: "test-key",
+      model: "gpt-5.6-luna",
+      fetcher,
+    });
+
+    expect(result.webMode).toBe("CURATED");
+    expect(result.reply.content).toContain("curated");
+    expect(result.reply.sources.some((source) => source.kind === "WEB_PUBLIC")).toBe(true);
   });
 });
