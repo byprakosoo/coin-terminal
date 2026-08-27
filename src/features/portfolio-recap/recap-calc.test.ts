@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeSnapshotBreakdown, snapshotHistory, sumCategory } from "./recap-calc";
-import type { PortfolioSnapshot, PortfolioSnapshotValues } from "./types";
+import { computeGoldSummary, computeSnapshotBreakdown, snapshotHistory, sumCategory } from "./recap-calc";
+import type { GoldTransaction, GoldValuation, PortfolioSnapshot, PortfolioSnapshotValues } from "./types";
 
 const values = (overrides: Partial<PortfolioSnapshotValues> = {}): PortfolioSnapshotValues => ({
   bankIdr: "100000",
@@ -76,5 +76,28 @@ describe("sumCategory", () => {
       values({ bankIdr: "250000" }),
     ];
     expect(sumCategory(snapshots, "bankIdr")).toBe("350000");
+  });
+});
+
+describe("computeGoldSummary", () => {
+  it("sorts transactions and recalculates weighted cost basis and P&L", () => {
+    const transactions: GoldTransaction[] = [
+      { id: "sale", transactionType: "SELL", occurredOn: "2026-03-01", goldType: "Antam", grams: "5", unitPriceIdr: "300", createdAt: "2026-03-01T00:00:00Z", updatedAt: "2026-03-01T00:00:00Z" },
+      { id: "buy-2", transactionType: "BUY", occurredOn: "2026-02-01", goldType: "Antam", grams: "10", unitPriceIdr: "200", createdAt: "2026-02-01T00:00:00Z", updatedAt: "2026-02-01T00:00:00Z" },
+      { id: "buy-1", transactionType: "BUY", occurredOn: "2026-01-01", goldType: "Antam", grams: "10", unitPriceIdr: "100", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+    ];
+    const valuations: GoldValuation[] = [{ id: "valuation", asOfDate: "2026-03-02", pricePerGramIdr: "250", source: "MANUAL", createdAt: "2026-03-02T00:00:00Z", updatedAt: "2026-03-02T00:00:00Z" }];
+
+    expect(computeGoldSummary(transactions, valuations)).toMatchObject({
+      heldGrams: "15",
+      remainingCostBasisIdr: "2250",
+      averageCostPerGramIdr: "150",
+      grossPurchaseCostIdr: "3000",
+      soldGrams: "5",
+      saleProceedsIdr: "1500",
+      realizedPnlIdr: "750",
+      marketValueIdr: "3750",
+      unrealizedPnlIdr: "1500",
+    });
   });
 });

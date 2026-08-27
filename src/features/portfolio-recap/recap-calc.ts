@@ -1,6 +1,6 @@
 import Decimal from "decimal.js";
 import type { DecimalString } from "@/lib/types";
-import type { PortfolioSnapshotValues } from "./types";
+import type { GoldSummary, GoldTransaction, GoldValuation, PortfolioSnapshotValues } from "./types";
 
 const toDecimal = (value: DecimalString | number | undefined) => new Decimal(value || 0);
 const sumDecimals = (values: Decimal[]) =>
@@ -122,4 +122,79 @@ export function sumCategory(
   key: keyof PortfolioSnapshotValues,
 ): DecimalString {
   return sumDecimals(snapshots.map((snapshot) => toDecimal(snapshot[key]))).toString();
+}
+
+/**
+ * Deterministic gold accounting (PRD §7.3). Transactions and valuations are
+ * copied before sorting so callers can safely pass read-model arrays directly.
+ */
+export function computeGoldSummary(
+  transactions: ReadonlyArray<GoldTransaction>,
+  valuations: ReadonlyArray<GoldValuation>,
+): GoldSummary {
+  const sortedTransactions = [...transactions].sort(
+    (a, b) =>
+      a.occurredOn.localeCompare(b.occurredOn) ||
+      a.createdAt.localeCompare(b.createdAt) ||
+      a.id.localeCompare(b.id),
+  );
+  const sortedValuations = [...valuations].sort(
+    (a, b) =>
+      a.asOfDate.localeCompare(b.asOfDate) ||
+      a.createdAt.localeCompare(b.createdAt) ||
+      a.id.localeCompare(b.id),
+  );
+
+  let heldGrams = new Decimal(0);
+  let remainingCostBasisIdr = new Decimal(0);
+  let soldGrams = new Decimal(0);
+  let saleProceedsIdr = new Decimal(0);
+  let realizedPnlIdr = new Decimal(0);
+  let grossPurchaseCostIdr = new Decimal(0);
+
+  for (const transaction of sortedTransactions) {
+    const grams = new Decimal(transaction.grams);
+    const value = grams.mul(transaction.unitPriceIdr);
+    if (transaction.transactionType === "BUY") {
+      heldGrams = heldGrams.plus(grams);
+      remainingCostBasisIdr = remainingCostBasisIdr.plus(value);
+      grossPurchaseCostIdr = grossPurchaseCostIdr.plus(value);
+      continue;
+    }
+
+    const releasedCost = heldGrams.gt(0)
+      ? remainingCostBasisIdr.div(heldGrams).mul(grams)
+      : new Decimal(0);
+    heldGrams = heldGrams.minus(grams);
+    remainingCostBasisIdr = Decimal.max(0, remainingCostBasisIdr.minus(releasedCost));
+    soldGrams = soldGrams.plus(grams);
+    saleProceedsIdr = saleProceedsIdr.plus(value);
+    realizedPnlIdr = realizedPnlIdr.plus(value.minus(releasedCost));
+  }
+
+  const valuation = sortedValuations.at(-1);
+  const marketValueIdr = valuation
+    ? heldGrams.mul(valuation.pricePerGramIdr)
+    : undefined;
+  const unrealizedPnlIdr = marketValueIdr?.minus(remainingCostBasisIdr);
+
+  return {
+    heldGrams: heldGrams.toString(),
+    valuationPricePerGramIdr: valuation?.pricePerGramIdr,
+    valuationDate: valuation?.asOfDate,
+    marketValueIdr: marketValueIdr?.toString(),
+    remainingCostBasisIdr: remainingCostBasisIdr.toString(),
+    averageCostPerGramIdr: heldGrams.gt(0)
+      ? remainingCostBasisIdr.div(heldGrams).toString()
+      : "0",
+    grossPurchaseCostIdr: grossPurchaseCostIdr.toString(),
+    soldGrams: soldGrams.toString(),
+    saleProceedsIdr: saleProceedsIdr.toString(),
+    realizedPnlIdr: realizedPnlIdr.toString(),
+    unrealizedPnlIdr: unrealizedPnlIdr?.toString(),
+    unrealizedPnlPct:
+      unrealizedPnlIdr && remainingCostBasisIdr.gt(0)
+        ? unrealizedPnlIdr.div(remainingCostBasisIdr).mul(100).toString()
+        : undefined,
+  };
 }

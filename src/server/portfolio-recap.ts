@@ -6,6 +6,7 @@ import { annualRecapSettings, goldTransactions, goldValuations, portfolioRecapSn
 import { ApiError } from "@/server/api";
 import { createId } from "@/server/ids";
 import type { AnnualRecapRow, GoldTransaction, GoldValuation, PortfolioRecapSummary, PortfolioSnapshot } from "@/features/portfolio-recap/types";
+import { computeGoldSummary } from "@/features/portfolio-recap/recap-calc";
 import type { goldTransactionSchema, goldValuationSchema, portfolioRecapSnapshotSchema } from "@/server/validators";
 import type { z } from "zod";
 
@@ -23,8 +24,8 @@ export async function getPortfolioRecap(userId: string): Promise<PortfolioRecapS
     .from(portfolioRecapSnapshots)
     .where(eq(portfolioRecapSnapshots.userId, userId))
     .orderBy(asc(portfolioRecapSnapshots.asOfDate), asc(portfolioRecapSnapshots.sequence)),
-    db.select().from(goldTransactions).where(eq(goldTransactions.userId, userId)).orderBy(asc(goldTransactions.occurredOn), asc(goldTransactions.createdAt)),
-    db.select().from(goldValuations).where(eq(goldValuations.userId, userId)).orderBy(asc(goldValuations.asOfDate), asc(goldValuations.createdAt)),
+    db.select().from(goldTransactions).where(eq(goldTransactions.userId, userId)).orderBy(asc(goldTransactions.occurredOn), asc(goldTransactions.createdAt), asc(goldTransactions.id)),
+    db.select().from(goldValuations).where(eq(goldValuations.userId, userId)).orderBy(asc(goldValuations.asOfDate), asc(goldValuations.createdAt), asc(goldValuations.id)),
     db.select().from(annualRecapSettings).where(eq(annualRecapSettings.userId, userId)).orderBy(asc(annualRecapSettings.year)),
   ]);
   const snapshots = rows.map(mapSnapshot);
@@ -35,11 +36,7 @@ export async function getPortfolioRecap(userId: string): Promise<PortfolioRecapS
   return {
     snapshots,
     latestSummary: snapshots.length ? summaryFor(snapshots) : undefined,
-    gold: {
-      transactions,
-      valuations,
-      summary: goldSummary(transactions, valuations),
-    },
+    gold: { transactions, valuations, summary: computeGoldSummary(transactions, valuations) },
     annual: { settings, rows: annualRows(settings, snapshots) },
     template: { available: false },
   };
@@ -51,13 +48,6 @@ function mapGoldTransaction(row: GoldTransactionRow): GoldTransaction {
 
 function mapGoldValuation(row: GoldValuationRow): GoldValuation {
   return { id: row.id, asOfDate: row.asOfDate, pricePerGramIdr: row.pricePerGramIdr, source: row.source, note: row.note ?? undefined, fingerprint: row.fingerprint ?? undefined, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
-}
-
-function goldSummary(transactions: GoldTransaction[], valuations: GoldValuation[]) {
-  let heldGrams = new Decimal(0); let remainingCostBasisIdr = new Decimal(0); let soldGrams = new Decimal(0); let saleProceedsIdr = new Decimal(0); let realizedPnlIdr = new Decimal(0); let grossPurchaseCostIdr = new Decimal(0);
-  for (const transaction of transactions) { const grams = new Decimal(transaction.grams); const value = grams.mul(transaction.unitPriceIdr); if (transaction.transactionType === "BUY") { heldGrams = heldGrams.plus(grams); remainingCostBasisIdr = remainingCostBasisIdr.plus(value); grossPurchaseCostIdr = grossPurchaseCostIdr.plus(value); } else { const cost = heldGrams.gt(0) ? remainingCostBasisIdr.div(heldGrams).mul(grams) : new Decimal(0); heldGrams = heldGrams.minus(grams); remainingCostBasisIdr = remainingCostBasisIdr.minus(cost); soldGrams = soldGrams.plus(grams); saleProceedsIdr = saleProceedsIdr.plus(value); realizedPnlIdr = realizedPnlIdr.plus(value.minus(cost)); } }
-  const valuation = valuations.at(-1); const marketValueIdr = valuation ? heldGrams.mul(valuation.pricePerGramIdr) : undefined; const unrealizedPnlIdr = marketValueIdr?.minus(remainingCostBasisIdr);
-  return { heldGrams: heldGrams.toString(), valuationPricePerGramIdr: valuation?.pricePerGramIdr, valuationDate: valuation?.asOfDate, marketValueIdr: marketValueIdr?.toString(), remainingCostBasisIdr: remainingCostBasisIdr.toString(), averageCostPerGramIdr: heldGrams.gt(0) ? remainingCostBasisIdr.div(heldGrams).toString() : "0", grossPurchaseCostIdr: grossPurchaseCostIdr.toString(), soldGrams: soldGrams.toString(), saleProceedsIdr: saleProceedsIdr.toString(), realizedPnlIdr: realizedPnlIdr.toString(), unrealizedPnlIdr: unrealizedPnlIdr?.toString(), unrealizedPnlPct: unrealizedPnlIdr && remainingCostBasisIdr.gt(0) ? unrealizedPnlIdr.div(remainingCostBasisIdr).mul(100).toString() : undefined };
 }
 
 function annualRows(settings: PortfolioRecapSummary["annual"]["settings"], snapshots: PortfolioSnapshot[]): AnnualRecapRow[] {
@@ -84,17 +74,14 @@ export async function createPortfolioRecapSnapshot(userId: string, input: Snapsh
 
 export async function createGoldTransaction(userId: string, input: GoldTransactionInput) {
   const id = createId();
-  await db.insert(goldTransactions).values({
+  await assertValidGoldSequence(userId, {
     id,
-    userId,
     transactionType: input.transactionType,
     occurredOn: input.occurredOn,
-    goldType: input.goldType,
     grams: new Decimal(input.grams).toString(),
-    unitPriceIdr: new Decimal(input.unitPriceIdr).toString(),
-    venue: input.venue || null,
-    note: input.note || null,
+    createdAt: new Date(),
   });
+  await db.insert(goldTransactions).values(goldTransactionValues(userId, id, input));
   return requireGoldTransaction(userId, id);
 }
 
@@ -109,6 +96,61 @@ export async function createGoldValuation(userId: string, input: GoldValuationIn
     note: input.note || null,
   });
   return requireGoldValuation(userId, id);
+}
+
+export async function updateGoldTransaction(userId: string, id: string, input: GoldTransactionInput) {
+  const existing = await requireGoldTransactionRow(userId, id);
+  await assertValidGoldSequence(
+    userId,
+    {
+      id,
+      transactionType: input.transactionType,
+      occurredOn: input.occurredOn,
+      grams: new Decimal(input.grams).toString(),
+      createdAt: existing.createdAt,
+    },
+    id,
+  );
+  await db
+    .update(goldTransactions)
+    .set(goldTransactionFields(input))
+    .where(and(eq(goldTransactions.id, id), eq(goldTransactions.userId, userId)));
+  return requireGoldTransaction(userId, id);
+}
+
+export async function deleteGoldTransaction(userId: string, id: string) {
+  await requireGoldTransactionRow(userId, id);
+  await assertValidGoldSequence(userId, undefined, id);
+  const result = await db
+    .delete(goldTransactions)
+    .where(and(eq(goldTransactions.id, id), eq(goldTransactions.userId, userId)));
+  if (!affectedRows(result)) {
+    throw new ApiError(409, "The gold transaction changed before deletion.", "CONFLICT");
+  }
+}
+
+export async function updateGoldValuation(userId: string, id: string, input: GoldValuationInput) {
+  await requireGoldValuationRow(userId, id);
+  await db
+    .update(goldValuations)
+    .set({
+      asOfDate: input.asOfDate,
+      pricePerGramIdr: new Decimal(input.pricePerGramIdr).toString(),
+      source: input.source ?? "MANUAL",
+      note: input.note || null,
+    })
+    .where(and(eq(goldValuations.id, id), eq(goldValuations.userId, userId)));
+  return requireGoldValuation(userId, id);
+}
+
+export async function deleteGoldValuation(userId: string, id: string) {
+  await requireGoldValuationRow(userId, id);
+  const result = await db
+    .delete(goldValuations)
+    .where(and(eq(goldValuations.id, id), eq(goldValuations.userId, userId)));
+  if (!affectedRows(result)) {
+    throw new ApiError(409, "The gold valuation changed before deletion.", "CONFLICT");
+  }
 }
 
 export async function updatePortfolioRecapSnapshot(userId: string, id: string, input: SnapshotInput) {
@@ -140,24 +182,101 @@ async function requireSnapshot(userId: string, id: string) {
   return mapSnapshot(row);
 }
 
-async function requireGoldTransaction(userId: string, id: string) {
+async function requireGoldTransactionRow(userId: string, id: string) {
   const [row] = await db
     .select()
     .from(goldTransactions)
     .where(and(eq(goldTransactions.id, id), eq(goldTransactions.userId, userId)))
     .limit(1);
   if (!row) throw new ApiError(404, "Gold transaction not found.", "NOT_FOUND");
-  return mapGoldTransaction(row);
+  return row;
 }
 
-async function requireGoldValuation(userId: string, id: string) {
+async function requireGoldTransaction(userId: string, id: string) {
+  return mapGoldTransaction(await requireGoldTransactionRow(userId, id));
+}
+
+async function requireGoldValuationRow(userId: string, id: string) {
   const [row] = await db
     .select()
     .from(goldValuations)
     .where(and(eq(goldValuations.id, id), eq(goldValuations.userId, userId)))
     .limit(1);
   if (!row) throw new ApiError(404, "Gold valuation not found.", "NOT_FOUND");
-  return mapGoldValuation(row);
+  return row;
+}
+
+async function requireGoldValuation(userId: string, id: string) {
+  return mapGoldValuation(await requireGoldValuationRow(userId, id));
+}
+
+function goldTransactionFields(input: GoldTransactionInput) {
+  return {
+    transactionType: input.transactionType,
+    occurredOn: input.occurredOn,
+    goldType: input.goldType,
+    grams: new Decimal(input.grams).toString(),
+    unitPriceIdr: new Decimal(input.unitPriceIdr).toString(),
+    venue: input.venue || null,
+    note: input.note || null,
+  };
+}
+
+function goldTransactionValues(userId: string, id: string, input: GoldTransactionInput) {
+  return { id, userId, ...goldTransactionFields(input) };
+}
+
+type GoldSequenceRecord = {
+  id: string;
+  transactionType: "BUY" | "SELL";
+  occurredOn: string;
+  grams: string;
+  createdAt: Date;
+};
+
+async function assertValidGoldSequence(
+  userId: string,
+  candidate?: GoldSequenceRecord,
+  excludedId?: string,
+) {
+  const rows = await db
+    .select({
+      id: goldTransactions.id,
+      transactionType: goldTransactions.transactionType,
+      occurredOn: goldTransactions.occurredOn,
+      grams: goldTransactions.grams,
+      createdAt: goldTransactions.createdAt,
+    })
+    .from(goldTransactions)
+    .where(eq(goldTransactions.userId, userId));
+  const records = rows
+    .filter((row) => row.id !== excludedId)
+    .map((row) => ({ ...row, grams: String(row.grams) }));
+  if (candidate) records.push(candidate);
+  records.sort(
+    (a, b) =>
+      a.occurredOn.localeCompare(b.occurredOn) ||
+      a.createdAt.getTime() - b.createdAt.getTime() ||
+      a.id.localeCompare(b.id),
+  );
+
+  let heldGrams = new Decimal(0);
+  for (const record of records) {
+    const grams = new Decimal(record.grams);
+    if (record.transactionType === "BUY") {
+      heldGrams = heldGrams.plus(grams);
+      continue;
+    }
+    if (grams.gt(heldGrams)) {
+      throw new ApiError(
+        422,
+        `Only ${heldGrams.toString()} g was available for this sale on ${record.occurredOn}.`,
+        "GOLD_SEQUENCE_CONFLICT",
+        { transactionId: record.id, occurredOn: record.occurredOn, availableGrams: heldGrams.toString(), requestedGrams: grams.toString() },
+      );
+    }
+    heldGrams = heldGrams.minus(grams);
+  }
 }
 
 function snapshotValues(userId: string, id: string, input: SnapshotInput, sequence: number) {
@@ -224,4 +343,9 @@ function summaryFor(snapshots: PortfolioSnapshot[]) {
 
 function totalFor(snapshot: PortfolioSnapshot) {
   return new Decimal(snapshot.bankIdr).plus(snapshot.rdpuIdr).plus(snapshot.ihsgIdr).plus(snapshot.sp500Idr).plus(snapshot.btcIdr).plus(snapshot.ethIdr).plus(snapshot.altcoinIdr).plus(snapshot.goldIdr);
+}
+
+function affectedRows(result: unknown) {
+  if (Array.isArray(result)) return Number((result[0] as { affectedRows?: number })?.affectedRows ?? 0);
+  return Number((result as { affectedRows?: number })?.affectedRows ?? 0);
 }

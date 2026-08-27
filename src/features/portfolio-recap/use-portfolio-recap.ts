@@ -30,8 +30,10 @@ export interface UsePortfolioRecap {
   prefill: (asOf: string) => Promise<SnapshotPrefill>;
   saveSnapshot: (input: SnapshotInput, id?: string) => Promise<PortfolioSnapshot>;
   deleteSnapshot: (id: string) => Promise<void>;
-  saveGoldTransaction: (input: GoldTransactionInput) => Promise<GoldTransaction>;
-  saveGoldValuation: (input: GoldValuationInput) => Promise<GoldValuation>;
+  saveGoldTransaction: (input: GoldTransactionInput, id?: string) => Promise<GoldTransaction>;
+  deleteGoldTransaction: (id: string) => Promise<void>;
+  saveGoldValuation: (input: GoldValuationInput, id?: string) => Promise<GoldValuation>;
+  deleteGoldValuation: (id: string) => Promise<void>;
 }
 
 /** Loads the full recap read model (PRD §9.2) and exposes snapshot CRUD against the contract. */
@@ -93,24 +95,52 @@ export function usePortfolioRecap(): UsePortfolioRecap {
   );
 
   const saveGoldTransactionAndReload = useCallback(
-    async (input: GoldTransactionInput) => {
-      const result = await saveGoldTransaction(input);
+    async (input: GoldTransactionInput, id?: string) => {
+      const result = await saveGoldTransaction(input, id);
       await reload();
       return result;
+    },
+    [reload],
+  );
+
+  const deleteGoldTransactionAndReload = useCallback(
+    async (id: string) => {
+      await deleteGoldTransaction(id);
+      await reload();
     },
     [reload],
   );
 
   const saveGoldValuationAndReload = useCallback(
-    async (input: GoldValuationInput) => {
-      const result = await saveGoldValuation(input);
+    async (input: GoldValuationInput, id?: string) => {
+      const result = await saveGoldValuation(input, id);
       await reload();
       return result;
     },
     [reload],
   );
 
-  return { data, loading, error, reload, prefill, saveSnapshot, deleteSnapshot, saveGoldTransaction: saveGoldTransactionAndReload, saveGoldValuation: saveGoldValuationAndReload };
+  const deleteGoldValuationAndReload = useCallback(
+    async (id: string) => {
+      await deleteGoldValuation(id);
+      await reload();
+    },
+    [reload],
+  );
+
+  return {
+    data,
+    loading,
+    error,
+    reload,
+    prefill,
+    saveSnapshot,
+    deleteSnapshot,
+    saveGoldTransaction: saveGoldTransactionAndReload,
+    deleteGoldTransaction: deleteGoldTransactionAndReload,
+    saveGoldValuation: saveGoldValuationAndReload,
+    deleteGoldValuation: deleteGoldValuationAndReload,
+  };
 }
 
 /** Gold transaction + valuation mutations (PRD §9.4). */

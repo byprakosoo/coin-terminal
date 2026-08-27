@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, CheckCircle2, Database, Eye, LockKeyhole, ShieldCheck } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
@@ -19,6 +20,7 @@ const schema = z.object({
   name: z.string().optional(),
   email: z.email("Enter a valid email address"),
   password: z.string().min(8, "Use at least 8 characters"),
+  rememberMe: z.boolean(),
 });
 
 type Values = z.infer<typeof schema>;
@@ -33,7 +35,7 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { name: mode === "register" ? "" : undefined, email: "", password: "" },
+    defaultValues: { name: mode === "register" ? "" : undefined, email: "", password: "", rememberMe: true },
   });
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
     setSubmitting(true);
     setServerError("");
     const result = mode === "sign-in"
-      ? await authClient.signIn.email({ email: values.email, password: values.password })
+      ? await authClient.signIn.email({ email: values.email, password: values.password, rememberMe: values.rememberMe })
       : await authClient.signUp.email({
           name: values.name?.trim() || values.email.split("@")[0],
           email: values.email,
@@ -93,6 +95,7 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
                 {mode === "register" && <Field label="Full name" error={form.formState.errors.name?.message}><Input suppressHydrationWarning autoComplete="name" {...form.register("name")} /></Field>}
                 <Field label="Email" error={form.formState.errors.email?.message}><Input suppressHydrationWarning type="email" autoComplete="email" {...form.register("email")} aria-invalid={!!form.formState.errors.email} /></Field>
                 <Field label="Password" error={form.formState.errors.password?.message}><Input suppressHydrationWarning type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} {...form.register("password")} aria-invalid={!!form.formState.errors.password} /></Field>
+                {mode === "sign-in" && <div className="flex items-center gap-2"><Controller control={form.control} name="rememberMe" render={({ field }) => <Checkbox id="remember-me" checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />} /><Label htmlFor="remember-me" className="cursor-pointer text-xs font-normal text-muted-foreground">Remember me on this device</Label></div>}
                 {serverError && <div className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{serverError}</div>}
                 <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Please wait…" : mode === "sign-in" ? "Open terminal" : "Continue to setup"}<ArrowRight /></Button>
               </form>
