@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { forgetRememberedAccount, getRememberedAccount, rememberAccount } from "@/lib/remembered-account";
 import { useTerminalStore } from "@/store/terminal-store";
 
 const schema = z.object({
@@ -21,6 +22,7 @@ const schema = z.object({
   email: z.email("Enter a valid email address"),
   password: z.string().min(8, "Use at least 8 characters"),
   rememberMe: z.boolean(),
+  rememberAccount: z.boolean(),
 });
 
 type Values = z.infer<typeof schema>;
@@ -33,10 +35,22 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
   const refreshWorkspace = useTerminalStore((state) => state.refreshWorkspace);
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [savedAccountEmail, setSavedAccountEmail] = useState("");
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { name: mode === "register" ? "" : undefined, email: "", password: "", rememberMe: true },
+    defaultValues: { name: mode === "register" ? "" : undefined, email: "", password: "", rememberMe: true, rememberAccount: true },
   });
+
+  useEffect(() => {
+    if (mode !== "sign-in") return;
+    const savedEmail = getRememberedAccount();
+    if (!savedEmail) return;
+    const hydrationTimer = window.setTimeout(() => {
+      setSavedAccountEmail(savedEmail);
+      form.setValue("email", savedEmail);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, [form, mode]);
 
   useEffect(() => {
     if (hydrated && session) router.replace(onboardingComplete ? "/overview" : "/onboarding");
@@ -56,6 +70,15 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
       setServerError(result.error.message ?? "Authentication failed.");
       setSubmitting(false);
       return;
+    }
+    if (mode === "sign-in") {
+      if (values.rememberAccount) {
+        rememberAccount(values.email);
+        setSavedAccountEmail(values.email.trim());
+      } else {
+        forgetRememberedAccount();
+        setSavedAccountEmail("");
+      }
     }
     const loaded = await refreshWorkspace();
     setSubmitting(false);
@@ -89,13 +112,14 @@ export function AuthPage({ mode }: { mode: "sign-in" | "register" }) {
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">{mode === "sign-in" ? "Sign in to Coin Terminal" : "Create your private workspace"}</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{mode === "sign-in" ? "Enter the credentials for your workspace." : "Your password is securely handled by Better Auth."}</p>
           </div>
+          {mode === "sign-in" && savedAccountEmail && <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] px-3.5 py-3"><div className="min-w-0"><p className="text-[10px] font-semibold tracking-[0.14em] text-primary uppercase">Saved account</p><p className="mt-1 truncate text-xs text-muted-foreground">{savedAccountEmail}</p></div><div className="flex shrink-0 items-center gap-1"><Button type="button" variant="ghost" size="sm" onClick={() => form.setValue("email", savedAccountEmail)}>Use</Button><Button type="button" variant="ghost" size="sm" onClick={() => { forgetRememberedAccount(); setSavedAccountEmail(""); if (form.getValues("email") === savedAccountEmail) form.setValue("email", ""); }}>Forget</Button></div></div>}
           <Card className="bg-card/82 shadow-2xl shadow-black/25">
             <CardContent className="p-5 sm:p-6">
               <form onSubmit={submit} className="space-y-4" noValidate>
                 {mode === "register" && <Field label="Full name" error={form.formState.errors.name?.message}><Input suppressHydrationWarning autoComplete="name" {...form.register("name")} /></Field>}
                 <Field label="Email" error={form.formState.errors.email?.message}><Input suppressHydrationWarning type="email" autoComplete="email" {...form.register("email")} aria-invalid={!!form.formState.errors.email} /></Field>
                 <Field label="Password" error={form.formState.errors.password?.message}><Input suppressHydrationWarning type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} {...form.register("password")} aria-invalid={!!form.formState.errors.password} /></Field>
-                {mode === "sign-in" && <div className="flex items-center gap-2"><Controller control={form.control} name="rememberMe" render={({ field }) => <Checkbox id="remember-me" checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />} /><Label htmlFor="remember-me" className="cursor-pointer text-xs font-normal text-muted-foreground">Remember me on this device</Label></div>}
+                {mode === "sign-in" && <div className="space-y-2"><div className="flex items-center gap-2"><Controller control={form.control} name="rememberMe" render={({ field }) => <Checkbox id="remember-me" checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />} /><Label htmlFor="remember-me" className="cursor-pointer text-xs font-normal text-muted-foreground">Keep me signed in on this device</Label></div><div className="flex items-center gap-2"><Controller control={form.control} name="rememberAccount" render={({ field }) => <Checkbox id="remember-account" checked={field.value} onCheckedChange={(checked) => { const shouldRemember = checked === true; field.onChange(shouldRemember); if (!shouldRemember) { forgetRememberedAccount(); setSavedAccountEmail(""); } }} />} /><Label htmlFor="remember-account" className="cursor-pointer text-xs font-normal text-muted-foreground">Remember this account (email only)</Label></div></div>}
                 {serverError && <div className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{serverError}</div>}
                 <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Please wait…" : mode === "sign-in" ? "Open terminal" : "Continue to setup"}<ArrowRight /></Button>
               </form>

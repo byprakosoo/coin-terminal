@@ -5,6 +5,7 @@ import {
   buildPortfolioModelContext,
   extractResponseText,
   generateAssistantAnswer,
+  testAiModelConnection,
   validateModelResponse,
 } from "@/server/ai-portfolio-assistant";
 
@@ -48,17 +49,109 @@ describe("AI portfolio assistant", () => {
     expect(modelContext.instructionsForDataUse).toContain("full-dataset aggregates");
   });
 
+  it("does not let an older question choose the asset for a new question", () => {
+    const modelContext = buildPortfolioModelContext({
+      question: "Review my ETH transaction history",
+      context,
+      groundedReply: buildAssistantReply("Review my ETH transaction history", context),
+      history: [{ role: "USER", content: "Review my BTC transaction history" }],
+    });
+
+    expect(modelContext.portfolioTransactionCoverage.filters.asset).toBe("ETH");
+    expect(modelContext.portfolioTransactions.every((row) => row.assetSymbol === "ETH")).toBe(true);
+  });
+
+  it("routes common Indonesian portfolio questions to matching deterministic data", () => {
+    const indonesianContext = {
+      ...context,
+      displayCurrency: "IDR" as const,
+      portfolioRecap: {
+        snapshots: [{
+          asOfDate: "2026-07-31",
+          bankIdr: "700000",
+          rdpuIdr: "0",
+          ihsgIdr: "0",
+          sp500Idr: "0",
+          btcIdr: "200000",
+          ethIdr: "100000",
+          altcoinIdr: "0",
+          goldIdr: "0",
+          idrPerUsd: "16000",
+        }],
+        latestSummary: { totalIdr: "1000000" },
+      },
+    } as never;
+
+    const total = buildAssistantReply("Berapa nilai total portofolio saya?", indonesianContext);
+    const spending = buildAssistantReply("Berapa pengeluaran saya bulan ini?", indonesianContext);
+    const transactions = buildAssistantReply("Apa transaksi beli BTC terbaru saya?", indonesianContext);
+
+    expect(total.content).toContain("1,000,000");
+    expect(total.content).toContain("Monthly History");
+    expect(spending.toolName).toBe("getSpendingSummary");
+    expect(transactions.toolName).toBe("getTransactions");
+    expect(new Set([total.content, spending.content, transactions.content]).size).toBe(3);
+  });
+
+  it("answers gold questions from the gold ledger instead of the crypto summary", () => {
+    const goldContext = {
+      ...context,
+      portfolioRecap: {
+        snapshots: [],
+        latestSummary: undefined,
+        gold: {
+          transactions: [{
+            id: "gold-buy",
+            transactionType: "BUY",
+            occurredOn: "2026-07-01",
+            goldType: "Antam 24K",
+            grams: "5",
+            unitPriceIdr: "2500000",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          }],
+          valuations: [],
+          summary: {
+            heldGrams: "5",
+            valuationPricePerGramIdr: "2600000",
+            valuationDate: "2026-07-31",
+            marketValueIdr: "13000000",
+            remainingCostBasisIdr: "12500000",
+            averageCostPerGramIdr: "2500000",
+            grossPurchaseCostIdr: "12500000",
+            soldGrams: "0",
+            saleProceedsIdr: "0",
+            realizedPnlIdr: "0",
+            unrealizedPnlIdr: "500000",
+            unrealizedPnlPct: "4",
+          },
+        },
+        annual: { settings: [], rows: [] },
+        template: { available: false },
+      },
+    } as never;
+
+    const reply = buildAssistantReply("Berapa total nilai emas yang saya punya?", goldContext);
+
+    expect(reply.content).toContain("5 g");
+    expect(reply.content).toContain("13,000,000");
+    expect(reply.content).not.toContain("tracked portfolio is worth");
+  });
+
   it("does not turn an arbitrary question into the deterministic portfolio summary", () => {
     const question = "How did my portfolio change compared with last year?";
+    const deterministicReply = buildAssistantReply(question, context);
     const modelContext = buildPortfolioModelContext({
       question,
       context,
-      groundedReply: buildAssistantReply(question, context),
+      groundedReply: deterministicReply,
     });
 
     expect(modelContext.questionIntent).toBe("GENERAL");
     expect(modelContext.deterministicSelector.answer).toBeUndefined();
     expect(modelContext.deterministicSelector.relevance).toContain("exact question");
+    expect(modelContext.deterministicSelector.sourceReceipts[0]?.label).toBe("Authenticated portfolio question routing");
+    expect(deterministicReply.content).toContain("map that question");
   });
 
   it("uses the latest all-assets Monthly History snapshot for total portfolio value", () => {
@@ -162,6 +255,31 @@ describe("AI portfolio assistant", () => {
     expect(result.reply).toEqual(groundedReply);
   });
 
+  it("keeps the no-model fallback specific to each question", async () => {
+    const spendingQuestion = "How much did I spend this month?";
+    const transactionQuestion = "What is my latest BTC transaction?";
+    const [spending, transaction] = await Promise.all([
+      generateAssistantAnswer({
+        question: spendingQuestion,
+        context,
+        groundedReply: buildAssistantReply(spendingQuestion, context),
+        gatewayToken: "",
+        apiKey: "",
+      }),
+      generateAssistantAnswer({
+        question: transactionQuestion,
+        context,
+        groundedReply: buildAssistantReply(transactionQuestion, context),
+        gatewayToken: "",
+        apiKey: "",
+      }),
+    ]);
+
+    expect(spending.reply.toolName).toBe("getSpendingSummary");
+    expect(transaction.reply.toolName).toBe("getTransactions");
+    expect(spending.reply.content).not.toBe(transaction.reply.content);
+  });
+
   it("uses response output text without changing verified receipts", async () => {
     const fetcher = vi.fn(async () =>
       new Response(
@@ -185,6 +303,113 @@ describe("AI portfolio assistant", () => {
     expect(result.reply.content).toBe("Grounded model answer.");
     expect(result.reply.sources).toEqual(groundedReply.sources);
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the external model with the goal-allocation context and a matching fallback", async () => {
+    const question = "Berdasarkan tabungan dan alokasi portofolio gue saat ini, gimana cara pengalokasian yang baik berdasarkan tujuan keuangan gue.\n\n1. Daftar haji\n2. Dana pendidikan anak\n3. Beli mobil";
+    const goalContext = {
+      ...context,
+      displayCurrency: "IDR" as const,
+      portfolioRecap: {
+        snapshots: [{
+          id: "snapshot-1",
+          asOfDate: "2026-07-31",
+          sequence: 1,
+          source: "MANUAL",
+          bankIdr: "700000",
+          rdpuIdr: "100000",
+          ihsgIdr: "50000",
+          sp500Idr: "0",
+          btcIdr: "100000",
+          ethIdr: "50000",
+          altcoinIdr: "0",
+          goldIdr: "0",
+          idrPerUsd: "16000",
+          createdAt: "2026-07-31T00:00:00.000Z",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        }],
+        latestSummary: { totalIdr: "1000000" },
+        gold: { transactions: [], valuations: [], summary: { heldGrams: "0", remainingCostBasisIdr: "0", averageCostPerGramIdr: "0", grossPurchaseCostIdr: "0", soldGrams: "0", saleProceedsIdr: "0", realizedPnlIdr: "0" } },
+        annual: { settings: [], rows: [] },
+        template: { available: false },
+      },
+    } as never;
+    const fetcher = vi.fn(async (_url: string | URL | Request, request?: RequestInit) => {
+      const body = JSON.parse(String(request?.body)) as {
+        input?: Array<{ content?: string }>;
+        tools?: unknown[];
+      };
+      const content = body.input?.[0]?.content ?? "";
+      expect(content).toContain("allAssetsPortfolio");
+      expect(content).toContain("Daftar haji");
+      expect(content).toContain("GOAL_ALLOCATION");
+      expect(body.tools).toBeUndefined();
+      return new Response(JSON.stringify({ output_text: "Pisahkan alokasi berdasarkan horizon setiap tujuan dan gunakan skenario yang tetap kondisional." }), { status: 200 });
+    });
+
+    const result = await generateAssistantAnswer({
+      question,
+      context: goalContext,
+      groundedReply: buildAssistantReply(question, goalContext),
+      customConfig: {
+        label: "My OpenAI",
+        provider: "OPENAI",
+        model: "gpt-4o-mini",
+        endpointUrl: "https://api.openai.com/v1/responses",
+        apiKey: "openai-key",
+      },
+      fetcher,
+    });
+
+    expect(result.mode).toBe("CUSTOM_AI");
+    expect(result.reply.content).toContain("horizon");
+    expect(result.toolsUsed).toEqual(["getPortfolioSummary", "getDataQualityReport"]);
+    expect(result.webMode).toBe("NONE");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send reasoning options to non-reasoning OpenAI models", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, request?: RequestInit) => {
+      const body = JSON.parse(String(request?.body)) as { model: string; reasoning?: unknown };
+      expect(body.model).toBe("gpt-4o-mini");
+      expect(body.reasoning).toBeUndefined();
+      return new Response(JSON.stringify({ output_text: "OpenAI answer." }), { status: 200 });
+    });
+    const result = await generateAssistantAnswer({
+      question: "Explain my risk",
+      context,
+      groundedReply,
+      customConfig: {
+        label: "My OpenAI",
+        provider: "OPENAI",
+        model: "gpt-4o-mini",
+        endpointUrl: "https://api.openai.com/v1/responses",
+        apiKey: "openai-key",
+      },
+      fetcher,
+    });
+
+    expect(result.mode).toBe("CUSTOM_AI");
+    expect(result.reply.content).toBe("OpenAI answer.");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("tests a saved provider without sending portfolio data", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, request?: RequestInit) => {
+      const body = JSON.parse(String(request?.body)) as { input?: Array<{ content?: string }> };
+      expect(body.input?.[0]?.content).toBe("Return only CONNECTION_OK.");
+      return new Response(JSON.stringify({ output_text: "CONNECTION_OK" }), { status: 200 });
+    });
+    const result = await testAiModelConnection({
+      label: "My OpenAI",
+      provider: "OPENAI",
+      model: "gpt-4o-mini",
+      endpointUrl: "https://api.openai.com/v1/responses",
+      apiKey: "openai-key",
+    }, fetcher);
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toBe("CONNECTION_OK");
   });
 
   it("uses an encrypted-user-configured Anthropic model through the Messages API shape", async () => {
@@ -258,13 +483,15 @@ describe("AI portfolio assistant", () => {
         model: string;
         instructions: string;
         input: Array<{ role: string }>;
+        stream: boolean;
       };
       expect(body.model).toBe("gpt-5.6-luna");
       expect(body.instructions).toContain("Coin Terminal");
       expect(body.input).toEqual([{ type: "message", role: "user", content: expect.any(String) }]);
-      return new Response(JSON.stringify({ output_text: "Codex answer." }), {
+      expect(body.stream).toBe(true);
+      return new Response('data: {"type":"response.output_text.delta","delta":"Codex answer."}\n\ndata: [DONE]\n\n', {
         status: 200,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "text/event-stream" },
       });
     });
     const result = await generateAssistantAnswer({

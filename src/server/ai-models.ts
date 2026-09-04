@@ -33,6 +33,20 @@ export async function getActiveAiModelConfig(userId: string): Promise<ActiveAiMo
     .where(and(eq(aiModelConfigs.userId, userId), eq(aiModelConfigs.active, true)))
     .limit(1);
   if (!row) return undefined;
+  return decryptModelConfig(row);
+}
+
+export async function getAiModelConfig(userId: string, id: string): Promise<ActiveAiModelConfig> {
+  const [row] = await db
+    .select()
+    .from(aiModelConfigs)
+    .where(and(eq(aiModelConfigs.userId, userId), eq(aiModelConfigs.id, id)))
+    .limit(1);
+  if (!row) throw new ApiError(404, "AI model configuration not found.", "NOT_FOUND");
+  return decryptModelConfig(row);
+}
+
+async function decryptModelConfig(row: typeof aiModelConfigs.$inferSelect): Promise<ActiveAiModelConfig> {
   let apiKey: string;
   let accountId: string | undefined;
   if (row.provider === "OPENAI_CODEX") {

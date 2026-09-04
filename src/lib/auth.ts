@@ -88,6 +88,11 @@ export const auth = betterAuth({
     },
     cookiePrefix: "coin-terminal",
     useSecureCookies: process.env.NODE_ENV === "production",
+    defaultCookieAttributes: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
   },
   plugins: [nextCookies()],
 });

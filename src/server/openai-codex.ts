@@ -5,6 +5,8 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
 import { aiModelConfigs, aiOauthDeviceLogins } from "@/db/schema";
 import { env } from "@/lib/env";
+import { normalizeOpenAiCodexUsage } from "@/lib/ai-usage";
+import type { AiUsageSummary } from "@/lib/ai-usage";
 import { ApiError } from "@/server/api";
 import { createId } from "@/server/ids";
 
@@ -21,6 +23,11 @@ export interface OpenAiCodexCredential {
   idToken?: string;
   accountId?: string;
   expiresAt?: number;
+}
+
+export interface OpenAiCodexUsageCredential {
+  accessToken: string;
+  accountId?: string;
 }
 
 export interface CodexDeviceLoginStart {
@@ -232,6 +239,34 @@ export async function getOpenAiCodexCredential(row: typeof aiModelConfigs.$infer
   return refreshed;
 }
 
+export async function getOpenAiCodexUsage(credential: OpenAiCodexUsageCredential): Promise<AiUsageSummary> {
+  const observedAt = new Date().toISOString();
+  try {
+    const response = await fetchWithTimeout(openAiCodexUsageUrl(), {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${credential.accessToken}`,
+        originator: "codex_cli_rs",
+        "user-agent": "codex_cli_rs/0.0.0 (Coin Terminal)",
+        ...(credential.accountId ? { "ChatGPT-Account-ID": credential.accountId } : {}),
+      },
+    });
+    if (response.status === 401 || response.status === 403) {
+      return unavailableUsage("The ChatGPT connection is no longer authorized. Connect ChatGPT again.", observedAt);
+    }
+    if (!response.ok) {
+      return unavailableUsage(`ChatGPT usage is temporarily unavailable (HTTP ${response.status}).`, observedAt);
+    }
+    return normalizeOpenAiCodexUsage(await response.json(), observedAt);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "AI_CREDENTIALS_EXPIRED") {
+      return unavailableUsage("The ChatGPT connection expired. Connect ChatGPT again.", observedAt);
+    }
+    return unavailableUsage("ChatGPT usage is temporarily unavailable. Refresh and try again.", observedAt);
+  }
+}
+
 export function encryptCredential(value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
@@ -250,6 +285,16 @@ export function decryptCredential(value: string) {
 
 async function markDeviceLoginFailed(id: string) {
   await db.update(aiOauthDeviceLogins).set({ status: "FAILED" }).where(eq(aiOauthDeviceLogins.id, id));
+}
+
+function openAiCodexUsageUrl() {
+  const base = new URL(env.openAiCodexBaseUrl);
+  const usagePath = base.pathname.replace(/\/codex\/?$/, "/wham/usage");
+  return `${base.origin}${usagePath === base.pathname ? "/backend-api/wham/usage" : usagePath}`;
+}
+
+function unavailableUsage(message: string, observedAt: string): AiUsageSummary {
+  return { availability: "UNAVAILABLE", observedAt, message };
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {

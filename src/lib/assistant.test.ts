@@ -80,6 +80,41 @@ describe("buildAssistantReply", () => {
     expect(reply.investmentRelated).toBe(false);
   });
 
+  it("routes goal allocation questions to a useful portfolio fallback", () => {
+    const question = "Berdasarkan tabungan dan alokasi portofolio gue saat ini, gimana cara pengalokasian yang baik berdasarkan tujuan keuangan gue.\n\n1. Daftar haji\n2. Dana pendidikan anak\n3. Beli mobil";
+    const reply = buildAssistantReply(question, {
+      ...context,
+      displayCurrency: "IDR",
+      portfolioRecap: {
+        snapshots: [{
+          id: "snapshot-1",
+          asOfDate: "2026-07-31",
+          sequence: 1,
+          source: "MANUAL",
+          bankIdr: "700000",
+          rdpuIdr: "100000",
+          ihsgIdr: "50000",
+          sp500Idr: "0",
+          btcIdr: "100000",
+          ethIdr: "50000",
+          altcoinIdr: "0",
+          goldIdr: "0",
+          idrPerUsd: "16000",
+          createdAt: "2026-07-31T00:00:00.000Z",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        }],
+        latestSummary: { totalIdr: "1000000" },
+      },
+    } as never);
+
+    expect(reply.toolName).toBe("getPortfolioSummary");
+    expect(reply.content).toContain("Daftar haji");
+    expect(reply.content).toContain("Dana pendidikan anak");
+    expect(reply.content).toContain("Beli mobil");
+    expect(reply.content).not.toContain("This month you recorded");
+    expect(reply.investmentRelated).toBe(true);
+  });
+
   it("surfaces incomplete basis in data-quality answers", () => {
     const reply = buildAssistantReply("What data should I fix before trusting P&L?", context);
     expect(reply.toolName).toBe("getDataQualityReport");
@@ -100,7 +135,7 @@ describe("buildAssistantReply", () => {
   });
 
   it("preserves stale market state in portfolio source receipts", () => {
-    const reply = buildAssistantReply("What is my portfolio worth?", {
+    const reply = buildAssistantReply("Summarize my tracked portfolio", {
       ...context,
       prices: context.prices.map((price) => ({ ...price, freshness: "STALE" as const })),
     });

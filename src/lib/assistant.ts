@@ -44,26 +44,42 @@ export interface AssistantReply {
   investmentRelated: boolean;
 }
 
-export type AssistantQuestionIntent = "KEY_ACTION" | "TOTAL_PORTFOLIO_VALUE" | "GENERAL";
+export type AssistantQuestionIntent = "KEY_ACTION" | "TOTAL_PORTFOLIO_VALUE" | "GOAL_ALLOCATION" | "GENERAL";
+
+export function isGoalAllocationQuestion(question: string) {
+  const normalized = question.trim().toLowerCase();
+  return /tujuan keuangan|financial goals?|goal.?based|pengalokasian|alokasi(?:kan|si)?\s+(?:berdasarkan\s+)?tujuan|daftar haji|\bhaji\b|dana pendidikan|pendidikan anak|beli mobil|car purchase|education fund/.test(normalized);
+}
 
 export function classifyAssistantQuestion(question: string, previousUserQuestion?: string): AssistantQuestionIntent {
-  const normalized = question.toLowerCase();
+  const normalized = question.trim().toLowerCase();
   const current = classifyCurrentQuestion(normalized);
   if (current !== "GENERAL") return current;
-  if (previousUserQuestion && /^(?:and|so|then|what|how)\b|\b(?:it|that|this|those|they|there|also)\b/.test(normalized)) {
+  if (previousUserQuestion && isLikelyFollowUpQuestion(normalized)) {
     return classifyCurrentQuestion(previousUserQuestion.toLowerCase());
   }
   return "GENERAL";
 }
 
 function classifyCurrentQuestion(normalized: string): AssistantQuestionIntent {
-  if (/key action|next action|next step|what should i do|what do i do|how should i use|what should .*\b(?:cash|money)\b|\b(?:cash|money)\b.*\b(?:do|use|invest)\b/.test(normalized)) {
+  if (isGoalAllocationQuestion(normalized)) {
+    return "GOAL_ALLOCATION";
+  }
+  if (/key action|next action|next step|what should i do|what do i do|how should i use|what should .*\b(?:cash|money)\b|\b(?:cash|money)\b.*\b(?:do|use|invest)\b|langkah (?:utama|selanjutnya)|apa yang (?:harus|sebaiknya) saya lakukan|apa langkah|aksi utama|tindakan utama|sebaiknya .*\b(?:uang|dana|kas)\b|\b(?:uang|dana|kas)\b.*\b(?:dipakai|digunakan|diinvestasikan|diapakan)\b/.test(normalized)) {
     return "KEY_ACTION";
   }
-  if (/total (?:portfolio )?(?:value|worth)|portfolio value|net worth|all assets|entire portfolio/.test(normalized)) {
+  if (/total (?:portfolio )?(?:value|worth)|portfolio value|net worth|all assets|entire portfolio|total nilai|nilai total|nilai portofolio|nilai aset|total portofolio|kekayaan bersih|seluruh aset|semua aset|portofolio .*\b(?:bernilai|berapa|worth|value)\b|\b(?:what|how much|berapa)\b.*\b(?:portfolio|portofolio|aset)\b.*\b(?:worth|value|nilai|bernilai)\b/.test(normalized)) {
     return "TOTAL_PORTFOLIO_VALUE";
   }
   return "GENERAL";
+}
+
+export function isLikelyFollowUpQuestion(question: string) {
+  const normalized = question.trim().toLowerCase();
+  return /^(?:and|so|then)\b/.test(normalized) ||
+    /^(?:what|how) about\b/.test(normalized) ||
+    /^(?:what|how) (?:does|is) that\b/.test(normalized) ||
+    /\b(?:it|that|those|they|there|same)\b/.test(normalized);
 }
 
 function receipt(
@@ -86,7 +102,11 @@ export function buildAssistantReply(question: string, context: AssistantContext)
   const displayCurrency = context.displayCurrency ?? "USD";
   const formatMoney = (value: string | number, currency = displayCurrency, rates = context.fxRates, compact = false) =>
     formatMoneyValue(value, currency, rates, compact);
-  const normalized = question.toLowerCase();
+  const previousUserQuestion = context.conversationHistory?.filter((turn) => turn.role === "USER").at(-1)?.content;
+  const normalizedQuestion = question.trim().toLowerCase();
+  const normalized = previousUserQuestion && isLikelyFollowUpQuestion(normalizedQuestion)
+    ? `${previousUserQuestion} ${question}`.toLowerCase()
+    : normalizedQuestion;
   const portfolio = calculatePortfolio(context.transactions, context.prices);
   const defensiveSignal = context.signals.find(
     (item) => item.ruleVersion === defensiveRuleVersion,
@@ -108,13 +128,13 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     holding.assetSymbol === requestedAsset ||
     holding.name.toLowerCase() === requestedAsset?.toLowerCase(),
   );
-  const btcSignalIntent = /signal|defensive|model target|target allocation|shadow|validated|\bwatch\b|research verdict|buy or sell|should i (?:buy|sell)|\bentry\b|\bexit\b|outlook|momentum|\brsi\b|technical trend/.test(normalized);
-  const previousUserQuestion = context.conversationHistory?.filter((turn) => turn.role === "USER").at(-1)?.content;
+  const btcSignalIntent = /signal|sinyal|defensive|model target|target allocation|shadow|validated|\bwatch\b|research verdict|buy or sell|should i (?:buy|sell)|\bentry\b|\bexit\b|outlook|momentum|\brsi\b|technical trend|tren|trend|arah btc|beli atau jual/.test(normalized);
   const questionIntent = classifyAssistantQuestion(question, previousUserQuestion);
+  const goldIntent = /\bgold\b|emas|logam mulia|\bantam\b/.test(normalized);
 
   if (questionIntent === "KEY_ACTION") {
-    const cashMention = question.match(/\$\s?\d+(?:\.\d+)?/)?.[0]
-      ?? previousUserQuestion?.match(/\$\s?\d+(?:\.\d+)?/)?.[0]
+    const cashMention = question.match(/(?:[$€£]\s?\d[\d.,]*|Rp\.?\s?\d[\d.,]*|\d[\d.,]*\s?(?:usd|idr|dollar|rupiah|dolar))/i)?.[0]
+      ?? previousUserQuestion?.match(/(?:[$€£]\s?\d[\d.,]*|Rp\.?\s?\d[\d.,]*|\d[\d.,]*\s?(?:usd|idr|dollar|rupiah|dolar))/i)?.[0]
       ?? "the stated cash";
     const latestSnapshot = context.portfolioRecap?.snapshots.at(-1);
     const qualityIssues = [
@@ -145,7 +165,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (questionIntent === "TOTAL_PORTFOLIO_VALUE") {
+  if (questionIntent === "TOTAL_PORTFOLIO_VALUE" && (!goldIntent || /portfolio|portofolio|all assets|entire portfolio|seluruh aset|semua aset/.test(normalized))) {
     const latestSnapshot = context.portfolioRecap?.snapshots.at(-1);
     const latestSummary = context.portfolioRecap?.latestSummary;
     if (!latestSnapshot || !latestSummary) {
@@ -181,9 +201,89 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/expense|spend|spending|spent|saving|savings|income|cash flow|budget|category/.test(normalized)) {
+  if (goldIntent && questionIntent !== "GOAL_ALLOCATION") {
+    const gold = context.portfolioRecap?.gold.summary;
+    const goldTransactions = context.portfolioRecap?.gold.transactions
+      .slice()
+      .sort((left, right) => right.occurredOn.localeCompare(left.occurredOn));
+    if (!gold) {
+      return {
+        content: "No gold records are available yet. Add a gold transaction or valuation in Portfolio Recap before asking about gold holdings.",
+        toolName: "getPortfolioSummary",
+        sources: [receipt("Gold data-quality check", now, "CALCULATED", "MISSING", "Gold ledger and valuation required")],
+        investmentRelated: true,
+      };
+    }
+    if (/transaction|ledger|history|transaksi|riwayat|beli|jual|buy|sell/.test(normalized)) {
+      const recent = goldTransactions?.slice(0, 5) ?? [];
+      return {
+        content: recent.length
+          ? `Your gold ledger has ${goldTransactions?.length ?? 0} transaction${goldTransactions?.length === 1 ? "" : "s"}. Latest entries: ${recent.map((item) => `${item.transactionType} ${item.grams} g at ${formatNativeMoney(item.unitPriceIdr, "IDR")} on ${item.occurredOn}`).join("; ")}.`
+          : "No gold transactions are recorded yet.",
+        toolName: "getTransactions",
+        sources: [receipt("Authenticated gold ledger", now, "OBSERVED", "FRESH", "All matching persisted gold transactions")],
+        investmentRelated: true,
+      };
+    }
+    const valuation = gold.valuationPricePerGramIdr
+      ? ` Latest valuation is ${formatNativeMoney(gold.valuationPricePerGramIdr, "IDR")} per gram as of ${gold.valuationDate ?? "the latest recorded date"}.`
+      : " No gold valuation price is recorded yet, so market value is unavailable.";
+    const marketValue = gold.marketValueIdr
+      ? ` Estimated market value is ${formatNativeMoney(gold.marketValueIdr, "IDR")}.`
+      : "";
+    const pnl = gold.unrealizedPnlIdr
+      ? ` Unrealized P&L is ${formatNativeMoney(gold.unrealizedPnlIdr, "IDR")}.`
+      : "";
+    return {
+      content: `You currently hold ${gold.heldGrams} g of gold with ${formatNativeMoney(gold.remainingCostBasisIdr, "IDR")} of remaining recorded cost basis.${marketValue}${valuation}${pnl}`,
+      toolName: "getPortfolioSummary",
+      sources: [receipt("Gold ledger + valuation history", gold.valuationDate ?? now, "CALCULATED", gold.valuationPricePerGramIdr ? "FRESH" : "MISSING", "Latest persisted gold position")],
+      investmentRelated: true,
+    };
+  }
+
+  if (questionIntent === "GOAL_ALLOCATION") {
+    const latestSnapshot = context.portfolioRecap?.snapshots.at(-1);
+    const latestSummary = context.portfolioRecap?.latestSummary;
+    if (!latestSnapshot || !latestSummary) {
+      return {
+        content: "I can outline a goal-based allocation framework, but there is no all-assets Monthly History snapshot available yet. The account also does not store each goal's target amount, deadline, or monthly contribution, so an exact allocation cannot be calculated safely. Record those inputs for the Hajj fund, children's education, and car goal first.",
+        toolName: "getDataQualityReport",
+        sources: [receipt("All-assets Monthly History data-quality check", now, "CALCULATED", "MISSING", "Monthly History snapshot required")],
+        investmentRelated: true,
+      };
+    }
+
+    const formatSnapshotIdr = (value: string) => {
+      if (displayCurrency === "IDR") return formatNativeMoney(value, "IDR");
+      if (latestSnapshot.idrPerUsd && new Decimal(latestSnapshot.idrPerUsd).gt(0)) {
+        return formatNativeMoney(new Decimal(value).div(latestSnapshot.idrPerUsd).toString(), "USD");
+      }
+      return `${formatNativeMoney(value, "IDR")} (USD conversion unavailable)`;
+    };
+    const total = new Decimal(latestSummary.totalIdr);
+    const percentOfTotal = (value: Decimal) => total.gt(0) ? value.div(total).mul(100).toFixed(1) : "0.0";
+    const liquid = new Decimal(latestSnapshot.bankIdr).add(latestSnapshot.rdpuIdr);
+    const stocks = new Decimal(latestSnapshot.ihsgIdr).add(latestSnapshot.sp500Idr);
+    const crypto = new Decimal(latestSnapshot.btcIdr).add(latestSnapshot.ethIdr).add(latestSnapshot.altcoinIdr);
+    const gold = new Decimal(latestSnapshot.goldIdr);
+    const allocation = [
+      `liquid ${formatSnapshotIdr(liquid.toString())} (${percentOfTotal(liquid)}%)`,
+      `stocks ${formatSnapshotIdr(stocks.toString())} (${percentOfTotal(stocks)}%)`,
+      `crypto ${formatSnapshotIdr(crypto.toString())} (${percentOfTotal(crypto)}%)`,
+      `gold ${formatSnapshotIdr(gold.toString())} (${percentOfTotal(gold)}%)`,
+    ].join(", ");
+    return {
+      content: `For a goal-based plan, separate money by deadline instead of using one allocation for every goal. Your latest all-assets Monthly History snapshot on ${latestSnapshot.asOfDate} totals ${formatSnapshotIdr(latestSummary.totalIdr)}: ${allocation}. 1. Daftar haji: if the deadline is within about three years, prioritize Bank/RDPU or other liquid, lower-volatility assets and do not depend on crypto for a fixed-date need. 2. Dana pendidikan anak: match the mix to the time horizon; a longer horizon can tolerate a diversified growth bucket, then shift gradually toward liquid or lower-volatility assets as the education date approaches. 3. Beli mobil: if the purchase is within one to three years, keep the target amount liquid or in lower-volatility assets and include tax, insurance, and maintenance in the target. The account does not yet store each goal's target amount, deadline, or monthly contribution, so I cannot calculate exact percentages or whether the current allocation is sufficient. This is a conditional research framework, not a buy or sell instruction.`,
+      toolName: "getPortfolioSummary",
+      sources: [receipt("Monthly History Net Worth snapshot", latestSnapshot.asOfDate, "OBSERVED", "FRESH", `All-assets snapshot as of ${latestSnapshot.asOfDate}`)],
+      investmentRelated: true,
+    };
+  }
+
+  if (/expense|spend|spending|spent|saving|savings|income|cash flow|budget|category|pengeluaran|belanja|pemasukan|pendapatan|tabungan|menabung|arus kas|anggaran|kategori/.test(normalized)) {
     const currentMonth = monthKey();
-    const asksForPreviousMonth = /last month|previous month|prior month/.test(normalized);
+    const asksForPreviousMonth = /last month|previous month|prior month|bulan lalu|bulan sebelumnya/.test(normalized);
     const currentSpending = calculateSpending(context.spending, currentMonth, context.fxRates);
     const spending = asksForPreviousMonth
       ? calculateSpending(context.spending, previousMonth(currentMonth), context.fxRates)
@@ -226,7 +326,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/\b(?:smart|wallets?|late|tokens?|flows?|whales?)\b/.test(normalized) && !btcSignalIntent) {
+  if (/\b(?:smart|wallets?|late|tokens?|flows?|whales?|dompet|paus|ikan paus|arus dana)\b/.test(normalized) && !btcSignalIntent) {
     const event = context.events[0];
     if (!event) {
       return {
@@ -312,7 +412,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/quality|fix|missing|stale|trust/.test(normalized)) {
+  if (/quality|fix|missing|stale|trust|kualitas|perbaiki|perbaikan|kurang|hilang|usang|akurat|percaya|bisa dipercaya/.test(normalized)) {
     const incompleteAssets = portfolio.holdings
       .filter((holding) => holding.incompleteBasis)
       .map((holding) => holding.assetSymbol);
@@ -343,7 +443,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/transaction|ledger|trade history|bought|sold|when did i|last (?:buy|sell|trade)|latest (?:buy|sell|trade)|fees?\b|\b(?:buy|sell)\b/.test(normalized)) {
+  if (/transaction|ledger|trade history|bought|sold|when did i|last (?:buy|sell|trade)|latest (?:buy|sell|trade)|fees?\b|\b(?:buy|sell)\b|transaksi|riwayat|dibeli|terjual|beli|membeli|jual|menjual|setor|tarik|biaya/.test(normalized)) {
     const asset = mentionedAsset(normalized, context.transactions.map((transaction) => transaction.assetSymbol));
     const transactions = context.transactions
       .filter((transaction) => !asset || transaction.assetSymbol === asset)
@@ -361,9 +461,9 @@ export function buildAssistantReply(question: string, context: AssistantContext)
         investmentRelated: false,
       };
     }
-    const aggregateDirection = /\b(?:buy|bought)\b/.test(normalized)
+    const aggregateDirection = /\b(?:buy|bought|beli|membeli)\b/.test(normalized)
       ? "BUY"
-      : /\b(?:sell|sold)\b/.test(normalized)
+      : /\b(?:sell|sold|jual|menjual)\b/.test(normalized)
         ? "SELL"
         : undefined;
     if (aggregateDirection && /how much|total|aggregate|sum/.test(normalized)) {
@@ -397,7 +497,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
       };
     }
     const recent = transactions.slice(0, 5);
-    if (/\b(?:last|latest|most recent)\b/.test(normalized)) {
+    if (/\b(?:last|latest|most recent|terbaru|terakhir|paling baru)\b/.test(normalized)) {
       const latest = recent[0];
       return {
         content: latest
@@ -436,7 +536,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/\brealized\b/.test(normalized) && !/\bunrealized\b/.test(normalized)) {
+  if (/\brealized\b|terealisasi|direalisasikan/.test(normalized) && !/\bunrealized\b|belum terealisasi/.test(normalized)) {
     return {
       content: `Your ledger-calculated realized P&L is ${formatMoney(portfolio.realizedPnlUsd)}. Current unrealized P&L is ${formatMoney(portfolio.unrealizedPnlUsd)} on ${formatMoney(portfolio.totalValueUsd)} of tracked value.${portfolio.incompleteBasis ? " Incomplete acquisition basis still makes parts of the portfolio record provisional." : ""}`,
       toolName: "getPortfolioSummary",
@@ -445,7 +545,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/cost basis|how much (?:have )?i invested|total invested|overall return|total return|\broi\b/.test(normalized) && !requestedHolding) {
+  if (/cost basis|how much (?:have )?i invested|total invested|overall return|total return|\broi\b|basis biaya|total modal|berapa modal|imbal hasil keseluruhan|return total/.test(normalized) && !requestedHolding) {
     const costBasis = new Decimal(portfolio.totalCostBasisUsd);
     const unrealizedReturnPct = costBasis.gt(0)
       ? new Decimal(portfolio.unrealizedPnlUsd).div(costBasis).mul(100).toString()
@@ -458,7 +558,7 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/daily|today|24h|one.day/.test(normalized) && /change|move|perform(?:ance|ed)?|pnl|p&l|gain|loss/.test(normalized)) {
+  if (/daily|today|24h|one.day|hari ini|harian/.test(normalized) && /change|move|perform(?:ance|ed)?|pnl|p&l|gain|loss|perubah|kinerja|untung|rugi/.test(normalized)) {
     const dailyChangePct = requestedHolding?.dailyChangePct ?? portfolio.dailyChangePct;
     const currentValue = requestedHolding?.currentValueUsd ?? portfolio.totalValueUsd;
     const dailyValueChange = new Decimal(currentValue)
@@ -487,13 +587,13 @@ export function buildAssistantReply(question: string, context: AssistantContext)
     };
   }
 
-  if (/highest|lowest|best|worst|winner|loser|performance|pnl|p&l|gain|profit|loss/.test(normalized)) {
+  if (/highest|lowest|best|worst|winner|loser|performance|pnl|p&l|gain|profit|loss|performa|kinerja|untung|rugi|keuntungan|kerugian|imbal hasil|pengembalian/.test(normalized)) {
     const ordered = portfolio.holdings
       .slice()
       .sort((a, b) => new Decimal(b.unrealizedPnlUsd).cmp(a.unrealizedPnlUsd));
-    const asksForWorst = /lowest|worst|loser|biggest loss|most loss/.test(normalized);
+    const asksForWorst = /lowest|worst|loser|biggest loss|most loss|terendah|terburuk|rugi terbesar|kerugian terbesar/.test(normalized);
     const ranked = asksForWorst ? ordered.at(-1) : ordered[0];
-    const asksForRanked = /highest|lowest|best|worst|winner|loser|biggest (?:gain|profit|loss)|most (?:gain|profit|loss)/.test(normalized);
+    const asksForRanked = /highest|lowest|best|worst|winner|loser|biggest (?:gain|profit|loss)|most (?:gain|profit|loss)|tertinggi|terendah|terbaik|terburuk|terbesar/.test(normalized);
     return {
       content: ranked
         ? asksForRanked
@@ -513,14 +613,23 @@ export function buildAssistantReply(question: string, context: AssistantContext)
   const largest = portfolio.holdings
     .slice()
     .sort((left, right) => new Decimal(right.allocationPct).cmp(left.allocationPct))[0];
-  const concentrationAnswer = /concentrat|allocation|diversif|risk/.test(normalized);
+  const concentrationAnswer = /concentrat|allocation|diversif|risk|konsentras|alokasi|komposisi|porsi/.test(normalized);
+  const summaryAnswer = /summar(?:y|ize)|overview|tell me about|what(?:'s| is) in .*portfolio|ringkasan|gambaran|jelaskan .*portofolio|isi .*portofolio/.test(normalized);
+  if (!concentrationAnswer && !summaryAnswer) {
+    return {
+      content: "I could not map that question to a reliable calculation from the stored portfolio data yet. Try asking about total value, an asset's exposure or P&L, transaction history, spending, gold, BTC signals, or data quality.",
+      toolName: "getPortfolioSummary",
+      sources: [receipt("Authenticated portfolio question routing", latestPrice, "CALCULATED", marketFreshness)],
+      investmentRelated: /portfolio|portofolio|asset|aset|invest|modal|uang|dana/.test(normalized),
+    };
+  }
   return {
     content: concentrationAnswer
       ? `BTC is ${concentration}% of tracked current value.${largest ? ` The largest position is ${largest.assetSymbol} at ${largest.allocationPct}%.` : ""} Whether that is too concentrated depends on your risk capacity and time horizon; the app can establish the exposure but not choose that limit for you.${portfolio.incompleteBasis ? " Incomplete acquisition basis makes the exact allocation or P&L provisional." : ""}`
       : `Your tracked portfolio is worth ${formatMoney(portfolio.totalValueUsd)}, with ${formatMoney(portfolio.unrealizedPnlUsd)} in unrealized P&L.${largest ? ` The largest position is ${largest.assetSymbol} at ${largest.allocationPct}% of current value.` : ""}${portfolio.incompleteBasis ? " Incomplete acquisition basis means P&L should be treated as provisional." : ""}`,
     toolName: "getPortfolioSummary",
     sources: [receipt("Portfolio ledger + market snapshot", latestPrice, "CALCULATED", marketFreshness)],
-    investmentRelated: /portfolio|concentrat|allocation|risk|diversif/.test(normalized),
+    investmentRelated: /portfolio|concentrat|allocation|risk|diversif|portofolio|konsentras|alokasi|komposisi|porsi/.test(normalized),
   };
 }
 
@@ -546,11 +655,11 @@ function mentionedAsset(question: string, candidates: string[]) {
 
 function parseScenarioShock(question: string) {
   const directional = question.match(
-    /\b(drops?|falls?|declines?|decreases?|crashes?|down|rises?|gains?|increases?|up)\b(?:\s+by)?\s+(\d+(?:\.\d+)?)\s*%/i,
+    /\b(drops?|falls?|declines?|decreases?|crashes?|down|rises?|gains?|increases?|up|turun|jatuh|anjlok|naik|meningkat)\b(?:\s+by|\s+sebanyak)?\s+(\d+(?:[.,]\d+)?)\s*%/i,
   );
   if (directional) {
-    const magnitude = new Decimal(directional[2]);
-    const negative = /drop|fall|declin|decreas|crash|down/i.test(directional[1]);
+    const magnitude = new Decimal(directional[2].replace(",", "."));
+    const negative = /drop|fall|declin|decreas|crash|down|turun|jatuh|anjlok/i.test(directional[1]);
     return negative ? Decimal.min(100, magnitude).neg() : Decimal.min(1000, magnitude);
   }
   const signed = question.match(/([+-]\d+(?:\.\d+)?)\s*%/);
