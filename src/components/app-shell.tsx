@@ -57,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const markAllAlertsRead = useTerminalStore((state) => state.markAllAlertsRead);
   const signOut = useTerminalStore((state) => state.signOut);
   const updateProfile = useTerminalStore((state) => state.updateProfile);
+  const refreshWorkspace = useTerminalStore((state) => state.refreshWorkspace);
   const [currencySaving, setCurrencySaving] = useState(false);
   const unreadCount = alerts.filter((alert) => !alert.readAt).length;
   const current = navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
@@ -66,6 +67,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (!session) router.replace("/sign-in");
     else if (!profile.onboardingComplete) router.replace("/onboarding");
   }, [hydrated, profile.onboardingComplete, router, session]);
+
+  useEffect(() => {
+    if (!hydrated || !session) return;
+    const timer = window.setInterval(() => {
+      if (!useTerminalStore.getState().syncing) void refreshWorkspace();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [hydrated, refreshWorkspace, session]);
 
   if (!hydrated || !session || !profile.onboardingComplete) return <AppLoading />;
 

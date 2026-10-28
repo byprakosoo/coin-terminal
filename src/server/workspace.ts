@@ -508,6 +508,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     evidenceRows,
     ruleRows,
     snapshotRows,
+    dailyCandleRows,
   ] = await Promise.all([
     db.select().from(users).where(eq(users.id, userId)).limit(1),
     db
@@ -571,6 +572,12 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
       .where(eq(signals.userId, userId)),
     db.select().from(signalRuleVersions),
     db.select().from(marketSnapshots).orderBy(desc(marketSnapshots.observedAt)).limit(500),
+    db
+      .select()
+      .from(marketSnapshots)
+      .where(eq(marketSnapshots.snapshotType, "DAILY_CANDLE"))
+      .orderBy(desc(marketSnapshots.observedAt))
+      .limit(120),
   ]);
 
   const profile = profileRows[0];
@@ -670,7 +677,7 @@ export async function loadWorkspace(userId: string, signedInAt = new Date()) {
     transactions: transactionRows.map(mapPortfolioTransaction),
     spending: [...spendingRows.map(mapSpendingTransaction), ...carryoverRows.map(mapSpendingCarryover)],
     signals: btcSignals,
-    marketHistory: marketHistory(snapshotRows),
+    marketHistory: marketHistory(dailyCandleRows),
     wallets: walletRows.map(mapWallet),
     events: eventRows.map((event) => mapEvent(event, walletIdsByEvent.get(event.id) ?? [])),
     alerts: alertRows.map(mapAlert),

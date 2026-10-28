@@ -12,6 +12,7 @@ const coins = {
 interface SimplePriceResponse {
   [coin: string]: {
     usd?: number;
+    idr?: number;
     usd_24h_change?: number | null;
     last_updated_at?: number;
   };
@@ -26,7 +27,7 @@ interface MarketChartResponse {
 export async function fetchCryptoTickers() {
   const url = new URL(`${baseUrl}/simple/price`);
   url.searchParams.set("ids", Object.keys(coins).join(","));
-  url.searchParams.set("vs_currencies", "usd");
+  url.searchParams.set("vs_currencies", "usd,idr");
   url.searchParams.set("include_24hr_change", "true");
   url.searchParams.set("include_last_updated_at", "true");
   url.searchParams.set("precision", "full");
@@ -42,6 +43,7 @@ export async function fetchCryptoTickers() {
       assetSymbol: metadata.symbol,
       name: metadata.name,
       priceUsd: new Decimal(String(value.usd)).toString(),
+      priceIdr: value.idr ? new Decimal(String(value.idr)).toString() : undefined,
       dailyChangePct: new Decimal(String(value.usd_24h_change ?? 0)).toString(),
       observedAt: new Date(value.last_updated_at * 1_000),
     };

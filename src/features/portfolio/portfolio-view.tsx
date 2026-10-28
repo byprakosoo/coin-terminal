@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api-client";
 import { calculatePortfolio } from "@/lib/calculations";
 import { formatDateTime, formatDecimal, formatMoney, formatPct } from "@/lib/format";
+import { relativeTime } from "@/lib/utils";
 import type { PortfolioTransaction, TransactionType } from "@/lib/types";
 import { useTerminalStore } from "@/store/terminal-store";
 import { PortfolioRecapView } from "@/features/portfolio-recap/portfolio-recap-view";
@@ -77,7 +78,7 @@ export function PortfolioView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Holdings & history" title="Portfolio" description="Track live holdings and transactions, then review your month-end financial history in the same workspace." actions={currentTab === "live" ? <><Button variant="outline" size="sm" onClick={() => setImportOpen(true)}><FileUp />Import CSV</Button><Button size="sm" onClick={() => { setEditing(undefined); setFormOpen(true); }}><Plus />Add transaction</Button></> : <Badge variant="info">Portfolio history</Badge>} />
+      <PageHeader eyebrow="Holdings & history" title="Portfolio" description="Track live holdings and transactions, then review your month-end financial history in the same workspace." actions={currentTab === "live" ? <div className="flex flex-wrap items-center justify-end gap-2"><Badge variant={prices[0] ? "success" : "neutral"}>{prices[0] ? `Prices updated ${relativeTime(prices[0].observedAt)}` : "No market prices"}</Badge><Button variant="outline" size="sm" onClick={() => setImportOpen(true)}><FileUp />Import CSV</Button><Button size="sm" onClick={() => { setEditing(undefined); setFormOpen(true); }}><Plus />Add transaction</Button></div> : <Badge variant="info">Portfolio history</Badge>} />
       <Tabs value={currentTab} onValueChange={setTab}>
         <TabsList className="h-auto max-w-full overflow-x-auto">
           <TabsTrigger value="history">Monthly history</TabsTrigger>

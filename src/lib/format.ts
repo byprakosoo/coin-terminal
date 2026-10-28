@@ -13,7 +13,8 @@ export function formatMoney(
   rates?: FxRate[],
   compact = false,
 ) {
-  const rate = rates?.find((item) => item.currency === currency)?.usdRate ?? "1";
+  const rate = currency === "USD" ? "1" : rates?.find((item) => item.currency === currency)?.usdRate;
+  if (!rate || !new Decimal(rate).isFinite() || !new Decimal(rate).gt(0)) return "—";
   const amount = new Decimal(usdValue || 0).mul(rate).toNumber();
   return new Intl.NumberFormat("en-US", {
     style: "currency",
