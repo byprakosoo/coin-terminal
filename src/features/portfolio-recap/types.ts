@@ -65,6 +65,12 @@ export interface PortfolioSnapshot extends PortfolioSnapshotValues {
   fingerprint?: string;
   createdAt: string;
   updatedAt: string;
+  btcQuantity?: DecimalString;
+  ethQuantity?: DecimalString;
+  cryptoValuation?: {
+    btc?: { priceIdr: DecimalString; observedAt: string; snapshotId: string };
+    eth?: { priceIdr: DecimalString; observedAt: string; snapshotId: string };
+  };
 }
 
 export interface PortfolioSnapshotSummary {
@@ -226,6 +232,8 @@ export interface SnapshotInput {
   prefillMetadata?: SnapshotPrefillMetadata;
   note?: string;
   btcQuantity?: DecimalString;
+  ethQuantity?: DecimalString;
+  cryptoValuation?: PortfolioSnapshot["cryptoValuation"];
 }
 
 export interface GoldTransactionInput {

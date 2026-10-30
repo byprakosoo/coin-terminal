@@ -65,11 +65,18 @@ function annualRows(settings: PortfolioRecapSummary["annual"]["settings"], snaps
 
 export async function createPortfolioRecapSnapshot(userId: string, input: SnapshotInput) {
   let capturedInput = input;
-  if (input.btcQuantity !== undefined && input.asOfDate === new Date().toISOString().slice(0, 10)) {
-    const [quote] = await db.select().from(marketSnapshots).where(and(eq(marketSnapshots.instrument, "BTC/USD"), eq(marketSnapshots.snapshotType, "TICKER"))).orderBy(desc(marketSnapshots.observedAt)).limit(1);
-    const payload = quote?.payload as { priceIdr?: string } | undefined;
-    if (!quote || !payload?.priceIdr || Date.now() - quote.observedAt.getTime() > 15 * 60 * 1000) throw new ApiError(422, "A fresh BTC/IDR quote is required to capture today's BTC value.", "PRICE_UNAVAILABLE");
-    capturedInput = { ...input, btcIdr: new Decimal(input.btcQuantity).mul(payload.priceIdr).toString() };
+  const cryptoValuation: NonNullable<PortfolioSnapshot["cryptoValuation"]> = {};
+  if ((input.btcQuantity !== undefined || input.ethQuantity !== undefined) && input.asOfDate === new Date().toISOString().slice(0, 10)) {
+    const quotes = await db.select().from(marketSnapshots).where(and(eq(marketSnapshots.snapshotType, "TICKER"))).orderBy(desc(marketSnapshots.observedAt));
+    const setValue = (symbol: "BTC" | "ETH", quantity: string | undefined) => {
+      if (quantity === undefined) return symbol === "BTC" ? input.btcIdr : input.ethIdr;
+      const quote = quotes.find((row) => row.instrument === `${symbol}/USD`);
+      const payload = quote?.payload as { priceIdr?: string } | undefined;
+      if (!quote || !payload?.priceIdr || Date.now() - quote.observedAt.getTime() > 15 * 60 * 1000) throw new ApiError(422, `A fresh ${symbol}/IDR quote is required to save today's snapshot.`, "PRICE_UNAVAILABLE");
+      cryptoValuation[symbol.toLowerCase() as "btc" | "eth"] = { priceIdr: payload.priceIdr, observedAt: quote.observedAt.toISOString(), snapshotId: quote.id };
+      return new Decimal(quantity).mul(payload.priceIdr).toString();
+    };
+    capturedInput = { ...input, btcIdr: setValue("BTC", input.btcQuantity), ethIdr: setValue("ETH", input.ethQuantity), cryptoValuation };
   }
   const [latestForDate] = await db
     .select({ sequence: portfolioRecapSnapshots.sequence })
@@ -305,6 +312,7 @@ function snapshotValues(userId: string, id: string, input: SnapshotInput, sequen
     ihsgIdr: new Decimal(input.ihsgIdr).toString(),
     sp500Idr: new Decimal(input.sp500Idr).toString(),
     btcIdr: new Decimal(input.btcIdr).toString(),
+    prefillMetadata: { ...(input.cryptoValuation ? { cryptoValuation: input.cryptoValuation } : {}), ...(input.btcQuantity !== undefined ? { btcQuantity: input.btcQuantity } : {}), ...(input.ethQuantity !== undefined ? { ethQuantity: input.ethQuantity } : {}) },
     ethIdr: new Decimal(input.ethIdr).toString(),
     altcoinIdr: new Decimal(input.altcoinIdr).toString(),
     goldIdr: new Decimal(input.goldIdr).toString(),
@@ -324,11 +332,15 @@ function mapSnapshot(row: SnapshotRow): PortfolioSnapshot {
     ihsgIdr: row.ihsgIdr,
     sp500Idr: row.sp500Idr,
     btcIdr: row.btcIdr,
+    btcQuantity: typeof row.prefillMetadata?.btcQuantity === "string" ? row.prefillMetadata.btcQuantity : undefined,
+    ethQuantity: typeof row.prefillMetadata?.ethQuantity === "string" ? row.prefillMetadata.ethQuantity : undefined,
+    cryptoValuation: row.prefillMetadata?.cryptoValuation as PortfolioSnapshot["cryptoValuation"],
     ethIdr: row.ethIdr,
     altcoinIdr: row.altcoinIdr,
     goldIdr: row.goldIdr,
     idrPerUsd: row.idrPerUsd ?? undefined,
     source: row.source,
+    prefillMetadata: row.prefillMetadata ?? undefined,
     note: row.note ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

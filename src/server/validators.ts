@@ -123,6 +123,11 @@ export const portfolioRecapSnapshotSchema = z.object({
   sp500Idr: recapDecimal,
   btcIdr: recapDecimal,
   btcQuantity: z.string().regex(/^\d+(?:\.\d{1,8})?$/).optional(),
+  ethQuantity: z.string().regex(/^\d+(?:\.\d{1,18})?$/).optional(),
+  cryptoValuation: z.object({
+    btc: z.object({ priceIdr: z.string(), observedAt: z.iso.datetime(), snapshotId: z.string() }).optional(),
+    eth: z.object({ priceIdr: z.string(), observedAt: z.iso.datetime(), snapshotId: z.string() }).optional(),
+  }).optional(),
   ethIdr: recapDecimal,
   altcoinIdr: recapDecimal,
   goldIdr: recapDecimal,
