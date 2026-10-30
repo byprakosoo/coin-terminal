@@ -68,6 +68,7 @@ export async function syncMarketData() {
         assetSymbol: ticker.assetSymbol,
         name: ticker.name,
         priceUsd: ticker.priceUsd,
+        priceIdr: ticker.priceIdr,
         dailyChangePct: ticker.dailyChangePct,
       };
       const hash = payloadHash(payload);
@@ -86,7 +87,7 @@ export async function syncMarketData() {
           payload,
           payloadHash: hash,
         })
-        .onDuplicateKeyUpdate({ set: { id: sql`${marketSnapshots.id}` } });
+        .onDuplicateKeyUpdate({ set: { id: sql`${marketSnapshots.id}`, observedAt: ticker.observedAt, fetchedAt: now, freshnessStatus: now.getTime() - ticker.observedAt.getTime() <= 15 * 60 * 1000 ? "FRESH" : "DELAYED", payload } });
     }
 
     const btcTicker = tickers.find((ticker) => ticker.assetSymbol === "BTC");

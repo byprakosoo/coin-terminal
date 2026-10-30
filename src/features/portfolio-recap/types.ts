@@ -164,6 +164,7 @@ export interface PortfolioRecapSummary {
     cagrPct?: DecimalString;
   };
   template: WorkbookTemplateSummary;
+  btcBalance?: { quantity: DecimalString; updatedAt: string };
 }
 
 /** Result of `GET /api/portfolio-recap/prefill?asOf=` (PRD §9.3, §7.2). */
@@ -224,6 +225,7 @@ export interface SnapshotInput {
   source?: SnapshotSource;
   prefillMetadata?: SnapshotPrefillMetadata;
   note?: string;
+  btcQuantity?: DecimalString;
 }
 
 export interface GoldTransactionInput {

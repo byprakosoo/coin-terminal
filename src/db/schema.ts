@@ -362,6 +362,12 @@ export const portfolioRecapSnapshots = mysqlTable(
   ],
 );
 
+export const portfolioBtcBalances = mysqlTable("portfolio_btc_balances", {
+  userId: id("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull().default("0"),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP(3)`).$onUpdate(() => new Date()),
+});
+
 export const goldTransactions = mysqlTable(
   "gold_transactions",
   {

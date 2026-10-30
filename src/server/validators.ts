@@ -122,6 +122,7 @@ export const portfolioRecapSnapshotSchema = z.object({
   ihsgIdr: recapDecimal,
   sp500Idr: recapDecimal,
   btcIdr: recapDecimal,
+  btcQuantity: z.string().regex(/^\d+(?:\.\d{1,8})?$/).optional(),
   ethIdr: recapDecimal,
   altcoinIdr: recapDecimal,
   goldIdr: recapDecimal,
@@ -129,6 +130,8 @@ export const portfolioRecapSnapshotSchema = z.object({
   source: z.enum(["MANUAL", "HYBRID_PREFILL", "XLSX_IMPORT"]).optional(),
   note: z.string().trim().max(5_000).optional(),
 });
+
+export const btcBalanceSchema = z.object({ quantity: z.string().regex(/^\d+(?:\.\d{1,8})?$/, "Enter BTC to 8 decimal places or fewer.") });
 
 export const goldTransactionSchema = z.object({
   transactionType: z.enum(["BUY", "SELL"]),

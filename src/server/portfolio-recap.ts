@@ -2,7 +2,7 @@ import "server-only";
 import Decimal from "decimal.js";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { annualRecapSettings, goldTransactions, goldValuations, portfolioRecapSnapshots } from "@/db/schema";
+import { annualRecapSettings, goldTransactions, goldValuations, marketSnapshots, portfolioBtcBalances, portfolioRecapSnapshots } from "@/db/schema";
 import { ApiError } from "@/server/api";
 import { createId } from "@/server/ids";
 import type { AnnualRecapRow, GoldTransaction, GoldValuation, PortfolioRecapSummary, PortfolioSnapshot } from "@/features/portfolio-recap/types";
@@ -18,7 +18,7 @@ type GoldTransactionRow = typeof goldTransactions.$inferSelect;
 type GoldValuationRow = typeof goldValuations.$inferSelect;
 
 export async function getPortfolioRecap(userId: string): Promise<PortfolioRecapSummary> {
-  const [rows, goldTransactionRows, goldValuationRows, annualSettingsRows] = await Promise.all([
+  const [rows, goldTransactionRows, goldValuationRows, annualSettingsRows, balanceRows] = await Promise.all([
     db
     .select()
     .from(portfolioRecapSnapshots)
@@ -27,6 +27,7 @@ export async function getPortfolioRecap(userId: string): Promise<PortfolioRecapS
     db.select().from(goldTransactions).where(eq(goldTransactions.userId, userId)).orderBy(asc(goldTransactions.occurredOn), asc(goldTransactions.createdAt), asc(goldTransactions.id)),
     db.select().from(goldValuations).where(eq(goldValuations.userId, userId)).orderBy(asc(goldValuations.asOfDate), asc(goldValuations.createdAt), asc(goldValuations.id)),
     db.select().from(annualRecapSettings).where(eq(annualRecapSettings.userId, userId)).orderBy(asc(annualRecapSettings.year)),
+    db.select().from(portfolioBtcBalances).where(eq(portfolioBtcBalances.userId, userId)).limit(1),
   ]);
   const snapshots = rows.map(mapSnapshot);
   const transactions = goldTransactionRows.map(mapGoldTransaction);
@@ -39,7 +40,14 @@ export async function getPortfolioRecap(userId: string): Promise<PortfolioRecapS
     gold: { transactions, valuations, summary: computeGoldSummary(transactions, valuations) },
     annual: { settings, rows: annualRows(settings, snapshots) },
     template: { available: false },
+    btcBalance: balanceRows[0] ? { quantity: balanceRows[0].quantity, updatedAt: balanceRows[0].updatedAt.toISOString() } : undefined,
   };
+}
+
+export async function saveBtcBalance(userId: string, quantity: string) {
+  await db.insert(portfolioBtcBalances).values({ userId, quantity }).onDuplicateKeyUpdate({ set: { quantity, updatedAt: new Date() } });
+  const [row] = await db.select().from(portfolioBtcBalances).where(eq(portfolioBtcBalances.userId, userId)).limit(1);
+  return { quantity: row.quantity, updatedAt: row.updatedAt.toISOString() };
 }
 
 function mapGoldTransaction(row: GoldTransactionRow): GoldTransaction {
@@ -56,6 +64,13 @@ function annualRows(settings: PortfolioRecapSummary["annual"]["settings"], snaps
 }
 
 export async function createPortfolioRecapSnapshot(userId: string, input: SnapshotInput) {
+  let capturedInput = input;
+  if (input.btcQuantity !== undefined && input.asOfDate === new Date().toISOString().slice(0, 10)) {
+    const [quote] = await db.select().from(marketSnapshots).where(and(eq(marketSnapshots.instrument, "BTC/USD"), eq(marketSnapshots.snapshotType, "TICKER"))).orderBy(desc(marketSnapshots.observedAt)).limit(1);
+    const payload = quote?.payload as { priceIdr?: string } | undefined;
+    if (!quote || !payload?.priceIdr || Date.now() - quote.observedAt.getTime() > 15 * 60 * 1000) throw new ApiError(422, "A fresh BTC/IDR quote is required to capture today's BTC value.", "PRICE_UNAVAILABLE");
+    capturedInput = { ...input, btcIdr: new Decimal(input.btcQuantity).mul(payload.priceIdr).toString() };
+  }
   const [latestForDate] = await db
     .select({ sequence: portfolioRecapSnapshots.sequence })
     .from(portfolioRecapSnapshots)
@@ -68,7 +83,7 @@ export async function createPortfolioRecapSnapshot(userId: string, input: Snapsh
     .orderBy(desc(portfolioRecapSnapshots.sequence))
     .limit(1);
   const id = createId();
-  await db.insert(portfolioRecapSnapshots).values(snapshotValues(userId, id, input, (latestForDate?.sequence ?? 0) + 1));
+  await db.insert(portfolioRecapSnapshots).values(snapshotValues(userId, id, capturedInput, (latestForDate?.sequence ?? 0) + 1));
   return requireSnapshot(userId, id);
 }
 

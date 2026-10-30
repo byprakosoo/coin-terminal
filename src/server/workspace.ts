@@ -10,6 +10,7 @@ import {
   dataSources,
   importBatches,
   marketSnapshots,
+  portfolioBtcBalances,
   portfolioTransactions,
   signalEvidence,
   signalRuleVersions,
@@ -736,6 +737,7 @@ function latestPrices(rows: Snapshot[]): MarketPrice[] {
       assetSymbol: payload.assetSymbol,
       name: payload.name,
       priceUsd: payload.priceUsd,
+      priceIdr: payload.priceIdr,
       dailyChangePct: payload.dailyChangePct ?? "0",
       observedAt: row.observedAt.toISOString(),
       freshness: dynamicFreshness(row.freshnessStatus, row.observedAt, 15 * 60 * 1000),
@@ -809,6 +811,7 @@ function evidenceSourceLinks(details: Record<string, unknown> | null) {
 
 export async function clearUserWorkspace(userId: string) {
   await db.transaction(async (tx) => {
+    await tx.delete(portfolioBtcBalances).where(eq(portfolioBtcBalances.userId, userId));
     await tx.delete(importBatches).where(eq(importBatches.userId, userId));
     await tx.delete(portfolioTransactions).where(eq(portfolioTransactions.userId, userId));
     await tx.delete(spendingTransactions).where(eq(spendingTransactions.userId, userId));

@@ -38,6 +38,7 @@ export interface MarketPrice {
   assetSymbol: string;
   name: string;
   priceUsd: DecimalString;
+  priceIdr?: DecimalString;
   dailyChangePct: DecimalString;
   observedAt: string;
   freshness: Freshness;

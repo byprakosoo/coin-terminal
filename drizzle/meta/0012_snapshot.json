@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "9d2cf2a8-88e0-437f-93f8-65aedb397fb7",
-  "prevId": "2dfe07b7-f977-411a-a270-690e1cd71d28",
+  "id": "a9ba0278-8342-4d33-aca6-a3b86b019bd0",
+  "prevId": "9d2cf2a8-88e0-437f-93f8-65aedb397fb7",
   "tables": {
     "accounts": {
       "name": "accounts",
@@ -2052,6 +2052,60 @@
           "name": "market_snapshots_id",
           "columns": [
             "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "portfolio_btc_balances": {
+      "name": "portfolio_btc_balances",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "decimal(20,8)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP(3)"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "portfolio_btc_balances_user_id_users_id_fk": {
+          "name": "portfolio_btc_balances_user_id_users_id_fk",
+          "tableFrom": "portfolio_btc_balances",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "portfolio_btc_balances_user_id": {
+          "name": "portfolio_btc_balances_user_id",
+          "columns": [
+            "user_id"
           ]
         }
       },
