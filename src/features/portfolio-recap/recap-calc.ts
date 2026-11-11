@@ -47,6 +47,8 @@ export function computeSnapshotBreakdown(
   const crypto = btc.add(eth).add(altcoin);
   const total = liquid.add(stocks).add(crypto).add(gold);
   const pct = (part: Decimal) => (total.gt(0) ? part.div(total).mul(100) : new Decimal(0));
+  const splitPct = (part: Decimal, composition: Decimal) =>
+    composition.gt(0) ? part.div(composition).mul(100) : new Decimal(0);
 
   return {
     liquidIdr: liquid.toString(),
@@ -75,13 +77,13 @@ export function computeSnapshotBreakdown(
       gold: pct(gold).toString(),
     },
     cryptoSplitPct: {
-      btc: pct(btc).toString(),
-      eth: pct(eth).toString(),
-      altcoin: pct(altcoin).toString(),
+      btc: splitPct(btc, crypto).toString(),
+      eth: splitPct(eth, crypto).toString(),
+      altcoin: splitPct(altcoin, crypto).toString(),
     },
     stocksSplitPct: {
-      ihsg: pct(ihsg).toString(),
-      sp500: pct(sp500).toString(),
+      ihsg: splitPct(ihsg, stocks).toString(),
+      sp500: splitPct(sp500, stocks).toString(),
     },
   };
 }

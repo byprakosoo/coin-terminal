@@ -28,8 +28,11 @@ describe("computeSnapshotBreakdown", () => {
     const breakdown = computeSnapshotBreakdown(values());
     expect(breakdown.allocationPct.bankIdr).toBe("6.6666666666666666667");
     expect(breakdown.groupedPct.gold).toBe("16.666666666666666667");
-    expect(breakdown.cryptoSplitPct.btc).toBe("26.666666666666666667");
-    expect(breakdown.stocksSplitPct.ihsg).toBe("13.333333333333333333");
+    expect(breakdown.cryptoSplitPct.btc).toBe("66.666666666666666667");
+    expect(breakdown.cryptoSplitPct.eth).toBe("25");
+    expect(breakdown.cryptoSplitPct.altcoin).toBe("8.3333333333333333333");
+    expect(breakdown.stocksSplitPct.ihsg).toBe("40");
+    expect(breakdown.stocksSplitPct.sp500).toBe("60");
   });
 
   it("returns zero allocation when the total is zero", () => {
